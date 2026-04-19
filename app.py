@@ -128,7 +128,82 @@ div[data-testid="stFileUploader"] {
     padding: 0.35rem 0.5rem;
     border: 1px solid rgba(255,255,255,0.08);
 }
+st.markdown("""
+<style>
+/* 通常テキストを明るく */
+p, label, div, span {
+    color: #f2f7ff;
+}
+
+/* 小さい説明文 */
+.small-note {
+    color: #dbe7ff !important;
+    font-size: 1rem !important;
+    font-weight: 500 !important;
+}
+
+/* expanderや通常ラベル */
+[data-testid="stExpander"] summary,
+[data-testid="stMarkdownContainer"] p,
+label[data-testid="stWidgetLabel"] {
+    color: #f5f9ff !important;
+    font-weight: 600 !important;
+}
+
+/* selectbox / uploader 内の文字 */
+.stSelectbox div,
+.stFileUploader div {
+    color: #f5f9ff !important;
+}
+
+/* 入力欄・選択欄 */
+[data-baseweb="select"] > div,
+[data-baseweb="input"] > div,
+[data-testid="stFileUploader"] section {
+    background: rgba(255,255,255,0.08) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.18) !important;
+}
+
+/* アップロード欄の中の文字 */
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] span,
+[data-testid="stFileUploader"] label {
+    color: #eef5ff !important;
+}
+
+/* ボタン通常時 */
+.stButton > button {
+    color: #ffffff !important;
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+}
+
+/* 無効ボタンの見やすさ改善 */
+.stButton > button:disabled,
+.stDownloadButton > button:disabled {
+    background: rgba(255,255,255,0.14) !important;
+    color: #dce8ff !important;
+    border: 1px solid rgba(255,255,255,0.16) !important;
+    opacity: 1 !important;
+}
+
+/* 成功メッセージ */
+[data-testid="stAlert"] {
+    color: #f7fbff !important;
+}
+
+/* data frame の文字 */
+[data-testid="stDataFrame"] * {
+    color: #f6f9ff !important;
+}
+
+/* selectboxのプレースホルダ */
+[data-baseweb="select"] span {
+    color: #eef5ff !important;
+}
 </style>
+""", unsafe_allow_html=True)</style>
 """, unsafe_allow_html=True)
 
 
