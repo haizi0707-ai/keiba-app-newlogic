@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="競馬 ランクアプリ v6.8 New Logic", layout="wide")
 
-# =========================
-# 初期設定
-# =========================
 DEFAULT_THRESHOLDS = pd.DataFrame([
     {"rank": "S", "min_score": 28.0, "max_score": 999.0},
     {"rank": "A", "min_score": 24.0, "max_score": 28.0},
@@ -27,9 +24,6 @@ if "ranked_prediction_df" not in st.session_state:
 if "generated_image_bytes" not in st.session_state:
     st.session_state.generated_image_bytes = None
 
-# =========================
-# CSS
-# =========================
 st.markdown("""
 <style>
 html, body, [data-testid="stAppViewContainer"] {
@@ -47,51 +41,52 @@ html, body, [data-testid="stAppViewContainer"] {
 }
 
 .main-title {
-    font-size: 2.75rem;
+    font-size: 2.15rem;
     font-weight: 800;
     color: #ffffff;
-    line-height: 1.2;
-    margin-bottom: 0.4rem;
+    line-height: 1.25;
+    margin-bottom: 0.35rem;
 }
 
 .sub-title {
-    color: #dce8ff;
-    font-size: 1.08rem;
-    line-height: 1.85;
+    color: #e6efff;
+    font-size: 1rem;
+    line-height: 1.8;
     margin-bottom: 1rem;
 }
 
 .info-box {
-    background: rgba(166, 198, 255, 0.10);
-    border: 1px solid rgba(166, 198, 255, 0.22);
-    border-radius: 22px;
-    padding: 1.2rem 1.3rem;
-    color: #f5f9ff;
-    font-size: 1.05rem;
-    line-height: 1.95;
-    margin-bottom: 1.2rem;
+    background: rgba(166, 198, 255, 0.12);
+    border: 1px solid rgba(166, 198, 255, 0.24);
+    border-radius: 20px;
+    padding: 1.1rem 1.15rem;
+    color: #ffffff;
+    font-size: 1rem;
+    line-height: 1.85;
+    margin-bottom: 1.1rem;
 }
 
 .section-card {
     background: linear-gradient(180deg, rgba(10,20,40,0.97) 0%, rgba(8,16,32,0.97) 100%);
-    border: 1px solid rgba(122, 154, 214, 0.20);
+    border: 1px solid rgba(122, 154, 214, 0.22);
     border-radius: 24px;
-    padding: 1.15rem 1.15rem 1rem 1.15rem;
-    margin-bottom: 1.25rem;
+    padding: 1rem 1rem 0.9rem 1rem;
+    margin-bottom: 1.15rem;
     box-shadow: 0 8px 28px rgba(0,0,0,0.16);
 }
 
 .section-title {
     color: #ffffff;
-    font-size: 1.85rem;
+    font-size: 1.45rem;
     font-weight: 800;
+    line-height: 1.35;
     margin: 0;
 }
 
 .small-note {
-    color: #e5efff;
+    color: #f2f7ff;
     font-size: 1rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .metric-card {
@@ -115,46 +110,43 @@ html, body, [data-testid="stAppViewContainer"] {
     line-height: 1.1;
 }
 
-/* Markdown/expander labels */
 [data-testid="stMarkdownContainer"] p,
 [data-testid="stExpander"] summary,
 label[data-testid="stWidgetLabel"] {
-    color: #f6f9ff !important;
+    color: #f8fbff !important;
     font-weight: 600 !important;
 }
 
-/* File uploader */
 [data-testid="stFileUploader"] {
-    background: #15233a !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
+    background: #1a2942 !important;
+    border: 1px solid rgba(255,255,255,0.16) !important;
     border-radius: 18px !important;
     padding: 0.5rem 0.55rem !important;
 }
 
 [data-testid="stFileUploader"] section {
-    background: #15233a !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
+    background: #1a2942 !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
     border-radius: 16px !important;
-    color: #f7fbff !important;
+    color: #ffffff !important;
 }
 
 [data-testid="stFileUploader"] button {
-    background: #eef4ff !important;
-    color: #13213a !important;
-    font-weight: 700 !important;
+    background: #ffffff !important;
+    color: #12213a !important;
+    font-weight: 800 !important;
     border: none !important;
     border-radius: 14px !important;
 }
 
 [data-testid="stFileUploader"] * {
-    color: #f7fbff !important;
+    color: #ffffff !important;
 }
 
-/* Selectbox */
 [data-baseweb="select"] > div {
-    background: #15233a !important;
+    background: #1a2942 !important;
     color: #ffffff !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
+    border: 1px solid rgba(255,255,255,0.16) !important;
     border-radius: 16px !important;
     min-height: 3rem !important;
 }
@@ -163,7 +155,6 @@ label[data-testid="stWidgetLabel"] {
     color: #ffffff !important;
 }
 
-/* Buttons */
 .stButton > button,
 .stDownloadButton > button {
     border-radius: 18px !important;
@@ -171,6 +162,7 @@ label[data-testid="stWidgetLabel"] {
     padding: 0.82rem 1rem !important;
     border: none !important;
     box-shadow: none !important;
+    font-size: 1rem !important;
 }
 
 .green-btn button {
@@ -189,20 +181,19 @@ label[data-testid="stWidgetLabel"] {
 }
 
 .dark-btn button {
-    background: #273750 !important;
-    color: #eef4ff !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
+    background: #314564 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
 }
 
 .stButton > button:disabled,
 .stDownloadButton > button:disabled {
-    background: #26364e !important;
-    color: #dce8ff !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
+    background: #5c6f8f !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.18) !important;
     opacity: 1 !important;
 }
 
-/* Alerts */
 [data-testid="stAlert"] {
     border-radius: 16px !important;
 }
@@ -210,12 +201,10 @@ label[data-testid="stWidgetLabel"] {
     color: #ffffff !important;
 }
 
-/* Dataframe */
 [data-testid="stDataFrame"] * {
     color: #f8fbff !important;
 }
 
-/* Rank pill */
 .rank-pill {
     display: inline-block;
     padding: 0.22rem 0.68rem;
@@ -230,23 +219,21 @@ label[data-testid="stWidgetLabel"] {
 .rank-C { background: #d79717; }
 .rank-D { background: #c65454; }
 
-/* Preview placeholder */
 .preview-box {
-    background: #071223;
-    border: 1px solid rgba(126, 156, 214, 0.16);
+    background: #091426;
+    border: 1px solid rgba(126, 156, 214, 0.18);
     border-radius: 20px;
     min-height: 320px;
     padding: 1rem;
-    color: #f5f9ff;
+    color: #ffffff;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
-# 共通関数
-# =========================
+
 def normalize_text_col(series: pd.Series) -> pd.Series:
     return series.astype(str).str.replace("\u3000", " ", regex=False).str.strip()
+
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -291,6 +278,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def ensure_race_key_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     for col in ["日付", "開催", "レース名", "馬名"]:
@@ -299,6 +287,7 @@ def ensure_race_key_columns(df: pd.DataFrame) -> pd.DataFrame:
     if "R" not in df.columns:
         df["R"] = ""
     return df
+
 
 def parse_surface_distance(value):
     if pd.isna(value):
@@ -312,6 +301,7 @@ def parse_surface_distance(value):
         return "障害", pd.to_numeric(s.replace("障", ""), errors="coerce")
     return "", pd.to_numeric(s, errors="coerce")
 
+
 def add_surface_distance_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "距離" in df.columns and "芝ダ" not in df.columns:
@@ -324,6 +314,7 @@ def add_surface_distance_columns(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df["距離数値"] = np.nan
     return df
+
 
 def get_distance_band(distance):
     if pd.isna(distance):
@@ -339,6 +330,7 @@ def get_distance_band(distance):
         return "中長距離"
     return "長距離"
 
+
 def get_going_group(going):
     if pd.isna(going):
         return "不明"
@@ -346,6 +338,7 @@ def get_going_group(going):
     if g == "良":
         return "良"
     return "道悪"
+
 
 def get_interval_category(value):
     if pd.isna(value):
@@ -375,6 +368,7 @@ def get_interval_category(value):
         return "中6〜9週"
     return "10週以上"
 
+
 def get_distance_change(curr, prev):
     curr_num = pd.to_numeric(curr, errors="coerce")
     prev_num = pd.to_numeric(prev, errors="coerce")
@@ -386,25 +380,30 @@ def get_distance_change(curr, prev):
         return "短縮"
     return "同距離"
 
+
 def get_track_change(curr, prev):
     if pd.isna(curr) or pd.isna(prev):
         return "不明"
     return "同場" if str(curr).strip() == str(prev).strip() else "場替わり"
+
 
 def get_jockey_change(curr, prev):
     if pd.isna(curr) or pd.isna(prev) or str(curr).strip() == "" or str(prev).strip() == "":
         return "不明"
     return "継続" if str(curr).strip() == str(prev).strip() else "乗り替わり"
 
+
 def calc_place_flag(series):
     s = pd.to_numeric(series, errors="coerce")
     return np.where((s >= 1) & (s <= 3), 1, 0)
+
 
 def add_rank(score, thresholds):
     for _, row in thresholds.iterrows():
         if score >= row["min_score"] and score < row["max_score"]:
             return row["rank"]
     return "D"
+
 
 def classify_rank(rank):
     rank = str(rank)
@@ -416,13 +415,7 @@ def classify_rank(rank):
         "D": "軽視",
     }.get(rank, "軽視")
 
-def rank_badge(rank: str) -> str:
-    cls = f"rank-{rank}" if rank in RANK_ORDER else "rank-D"
-    return f'<span class="rank-pill {cls}">{rank}</span>'
 
-# =========================
-# 集計関数
-# =========================
 def make_axis_summary_tables(history_df: pd.DataFrame):
     df = history_df.copy()
 
@@ -459,6 +452,7 @@ def make_axis_summary_tables(history_df: pd.DataFrame):
         "trainer_jchg": make_group(["調教師", "騎手変化"]),
     }
 
+
 def score_from_summary(base_df: pd.DataFrame, summary_df: pd.DataFrame, keys: list, min_count=10):
     if summary_df.empty:
         return pd.Series([np.nan] * len(base_df), index=base_df.index)
@@ -468,6 +462,7 @@ def score_from_summary(base_df: pd.DataFrame, summary_df: pd.DataFrame, keys: li
         return pd.Series([np.nan] * len(base_df), index=base_df.index)
     merged = base_df[keys].merge(tmp[keys + ["複勝率"]], on=keys, how="left")
     return merged["複勝率"]
+
 
 def count_from_summary(base_df: pd.DataFrame, summary_df: pd.DataFrame, keys: list, min_count=1):
     if summary_df.empty:
@@ -479,6 +474,7 @@ def count_from_summary(base_df: pd.DataFrame, summary_df: pd.DataFrame, keys: li
     merged = base_df[keys].merge(tmp[keys + ["件数"]], on=keys, how="left")
     return merged["件数"]
 
+
 def safe_min_count(row, cols):
     vals = []
     for c in cols:
@@ -489,15 +485,14 @@ def safe_min_count(row, cols):
         return np.nan
     return int(min(vals))
 
+
 def build_condition_text(row):
     return (
         f"縦:{row.get('種牡馬','')}×{row.get('開催','')}×{row.get('距離帯','')}×{row.get('馬場区分','')} / "
         f"横:{row.get('調教師','')}×{row.get('間隔カテゴリ','')}×{row.get('距離変化','')}×{row.get('開催変化','')}"
     )
 
-# =========================
-# データ整形
-# =========================
+
 def prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
     df = normalize_columns(df)
     df = ensure_race_key_columns(df)
@@ -531,6 +526,7 @@ def prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
             df["騎手変化"] = "不明"
 
     return df
+
 
 def prepare_prediction_df(df: pd.DataFrame, history_df: pd.DataFrame, thresholds: pd.DataFrame) -> pd.DataFrame:
     df = normalize_columns(df)
@@ -621,9 +617,7 @@ def prepare_prediction_df(df: pd.DataFrame, history_df: pd.DataFrame, thresholds
 
     return df
 
-# =========================
-# レース選択 / 画像
-# =========================
+
 def race_options_from_df(df: pd.DataFrame):
     need_cols = ["日付", "開催", "レース名"]
     if not all(c in df.columns for c in need_cols):
@@ -636,12 +630,14 @@ def race_options_from_df(df: pd.DataFrame):
         items.append((label, row.to_dict()))
     return items
 
+
 def filter_race_df(df: pd.DataFrame, race_dict: dict) -> pd.DataFrame:
     out = df.copy()
     for col, val in race_dict.items():
         if col in out.columns:
             out = out[out[col].astype(str) == str(val)]
     return out.copy()
+
 
 def build_race_image_bytes(race_df: pd.DataFrame, title: str) -> bytes:
     show_cols = [c for c in ["馬番", "馬名", "縦軸点", "横軸点", "総合点", "ランク"] if c in race_df.columns]
@@ -690,6 +686,7 @@ def build_race_image_bytes(race_df: pd.DataFrame, title: str) -> bytes:
     buf.seek(0)
     return buf.getvalue()
 
+
 def unique_race_count(df: pd.DataFrame) -> int:
     if df is None or df.empty:
         return 0
@@ -698,15 +695,14 @@ def unique_race_count(df: pd.DataFrame) -> int:
         return 0
     return len(df[cols].drop_duplicates())
 
+
 def saved_condition_count(history_df: pd.DataFrame) -> int:
     if history_df is None or history_df.empty:
         return 0
     summaries = make_axis_summary_tables(history_df)
     return int(sum(len(v) for v in summaries.values()))
 
-# =========================
-# ヘッダー
-# =========================
+
 st.markdown('<div class="main-title">競馬 ランクアプリ<br>v6.8 New Logic</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="sub-title">見た目は6.8v系の想定で、内部ロジックを新2軸版に差し替えた再構成版です。</div>',
@@ -724,9 +720,6 @@ st.markdown("""
 with st.expander("ランク基準を見る"):
     st.dataframe(DEFAULT_THRESHOLDS, use_container_width=True)
 
-# =========================
-# 過去データ
-# =========================
 st.markdown('<div class="section-card"><div class="section-title">過去レースCSV（収集用）</div></div>', unsafe_allow_html=True)
 
 history_file = st.file_uploader("過去レースCSV", type=["csv"], key="history_uploader", label_visibility="collapsed")
@@ -774,9 +767,6 @@ if st.session_state.history_df is not None:
 else:
     st.markdown('<div class="small-note">まだ取り込んでいません。</div>', unsafe_allow_html=True)
 
-# =========================
-# 予想データ
-# =========================
 st.markdown('<div class="section-card"><div class="section-title">予想レースCSV（画像化用）</div></div>', unsafe_allow_html=True)
 
 pred_file = st.file_uploader("予想レースCSV", type=["csv"], key="pred_uploader", label_visibility="collapsed")
@@ -881,9 +871,6 @@ if save_image:
             use_container_width=True
         )
 
-# =========================
-# 画像プレビュー
-# =========================
 st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
 
 if st.session_state.generated_image_bytes is not None:
@@ -891,9 +878,6 @@ if st.session_state.generated_image_bytes is not None:
 else:
     st.markdown('<div class="preview-box"><b>予想CSVを読み込んでください</b></div>', unsafe_allow_html=True)
 
-# =========================
-# 画像外の条件集計
-# =========================
 st.markdown('<div class="section-card"><div class="section-title">画像外の条件集計</div></div>', unsafe_allow_html=True)
 
 if st.session_state.ranked_prediction_df is not None:
@@ -912,9 +896,6 @@ if st.session_state.ranked_prediction_df is not None:
 else:
     st.info("予想CSVを読み込むと表示されます。")
 
-# =========================
-# 集計状況
-# =========================
 history_count = len(st.session_state.history_df) if st.session_state.history_df is not None else 0
 condition_count = saved_condition_count(st.session_state.history_df)
 prediction_race_count = unique_race_count(st.session_state.ranked_prediction_df)
