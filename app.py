@@ -648,15 +648,12 @@ def render_preview_html(race_df, title):
         rank = str(row.get("信頼度", "D"))
         category = row.get("分類", "")
         name = row.get("馬名", "")
-        html.append(f'''
-            <div class="preview-row">
-              <div>
-                <div class="preview-name">{name}</div>
-                <div class="preview-class">{category}</div>
-              </div>
-              <div class="rank-box rank-{rank}">{rank}</div>
-            </div>
-        ''')
+        html.append(
+            f'<div class="preview-row">'
+            f'<div><div class="preview-name">{name}</div><div class="preview-class">{category}</div></div>'
+            f'<div class="rank-box rank-{rank}">{rank}</div>'
+            f'</div>'
+        )
     html.append("</div>")
     st.markdown("".join(html), unsafe_allow_html=True)
 
@@ -666,33 +663,29 @@ def render_condition_table(race_df):
         return
     rows = []
     for _, row in race_df.iterrows():
-        rows.append(f'''
-            <tr>
-              <td>{row.get("馬名","")}</td>
-              <td>{row.get("信頼度","")}</td>
-              <td>{row.get("分類","")}</td>
-              <td class="cond-cond">{row.get("縦条件","")}</td>
-              <td class="cond-cond">{row.get("横条件","")}</td>
-              <td>{row.get("母数","")}</td>
-            </tr>
-        ''')
-    html = f'''
-    <table class="cond-table">
-      <thead>
-        <tr>
-          <th>馬名</th>
-          <th>信頼度</th>
-          <th>分類</th>
-          <th>縦条件</th>
-          <th>横条件</th>
-          <th>母数</th>
-        </tr>
-      </thead>
-      <tbody>
-        {"".join(rows)}
-      </tbody>
-    </table>
-    '''
+        rows.append(
+            f'<tr>'
+            f'<td>{row.get("馬名","")}</td>'
+            f'<td>{row.get("信頼度","")}</td>'
+            f'<td>{row.get("分類","")}</td>'
+            f'<td class="cond-cond">{row.get("縦条件","")}</td>'
+            f'<td class="cond-cond">{row.get("横条件","")}</td>'
+            f'<td>{row.get("母数","")}</td>'
+            f'</tr>'
+        )
+    html = (
+        '<table class="cond-table">'
+        '<thead><tr>'
+        '<th>馬名</th>'
+        '<th>信頼度</th>'
+        '<th>分類</th>'
+        '<th>縦条件</th>'
+        '<th>横条件</th>'
+        '<th>母数</th>'
+        '</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody>'
+        '</table>'
+    )
     st.markdown(html, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">競馬 ランクアプリ<br>v6.8 New Logic</div>', unsafe_allow_html=True)
