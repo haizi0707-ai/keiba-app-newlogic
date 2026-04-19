@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>競馬 ランクアプリ v6.8 New Logic</title>
+  <link rel="stylesheet" href="style_v2.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <h1>競馬 ランクアプリ<br>v6.8 New Logic</h1>
+      <p class="sub">見た目は6.8v系、内部ロジックは新2軸版です。</p>
+      <div class="info-box">
+        判定条件は <strong>血統適性 × 厩舎ローテ適性</strong> です。<br>
+        縦軸は「血統 × 競馬場・距離・馬場」、横軸は「厩舎 × 競馬場・距離・ローテ」で評価します。<br>
+        総合点から <strong>S〜D</strong> を自動判定します。
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>過去レースCSV（収集用）</h2>
+      <input id="historyFile" type="file" accept=".csv" />
+      <div class="btn-row">
+        <button class="btn red" id="loadHistoryBtn">過去レースCSVを取り込む</button>
+        <button class="btn red" id="backupBtn">JSONバックアップ</button>
+        <button class="btn red" id="clearHistoryBtn">過去データ削除</button>
+      </div>
+      <p id="historyStatus" class="note">まだ取り込んでいません。</p>
+    </section>
+
+    <section class="card">
+      <h2>予想レースCSV（画像化用）</h2>
+      <input id="predictionFile" type="file" accept=".csv" />
+      <label for="raceSelect">対象レース</label>
+      <select id="raceSelect">
+        <option value="">先にCSVを読み込んでください</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn red" id="loadPredictionBtn">予想CSVを読み込む</button>
+        <button class="btn red" id="renderImageBtn">画像を作成</button>
+        <button class="btn red" id="saveImageBtn">画像を保存</button>
+      </div>
+      <p id="predictionStatus" class="note">まだ読み込んでいません。</p>
+    </section>
+
+    <section class="card">
+      <h2>画像プレビュー</h2>
+      <div id="preview" class="preview-box">予想CSVを読み込んでください</div>
+    </section>
+
+    <section class="card">
+      <h2>画像外の条件集計</h2>
+      <div class="table-wrap">
+        <table id="summaryTable">
+          <thead>
+            <tr>
+              <th>馬名</th>
+              <th>信頼度</th>
+              <th>分類</th>
+              <th>条件</th>
+              <th>母数</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="5">予想CSVを読み込むと表示されます。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="metrics">
+      <div class="metric-card"><div class="metric-label">保存済み履歴件数</div><div id="mHistory" class="metric-value">0</div></div>
+      <div class="metric-card"><div class="metric-label">保存済み条件数</div><div id="mConditions" class="metric-value">0</div></div>
+      <div class="metric-card"><div class="metric-label">予想CSVレース数</div><div id="mRaces" class="metric-value">0</div></div>
+      <div class="metric-card"><div class="metric-label">予想CSV馬数</div><div id="mHorses" class="metric-value">0</div></div>
+    </section>
+  </div>
+
+  <script src="script_v2.js"></script>
+</body>
+</html>
