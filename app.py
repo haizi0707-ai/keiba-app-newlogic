@@ -38,14 +38,17 @@ if "generated_image_bytes" not in st.session_state:
     st.session_state.generated_image_bytes = None
 if "preview_race_df" not in st.session_state:
     st.session_state.preview_race_df = None
+if "preview_title" not in st.session_state:
+    st.session_state.preview_title = "レースランキング"
 
 st.markdown("""
 <style>
 html, body, [data-testid="stAppViewContainer"] {
     background: linear-gradient(180deg, #071223 0%, #0a1730 100%);
 }
-[data-testid="stHeader"] { background: rgba(0,0,0,0); }
-
+[data-testid="stHeader"] {
+    background: rgba(0,0,0,0);
+}
 .block-container {
     max-width: 1120px;
     padding-top: 1rem;
@@ -120,34 +123,41 @@ label[data-testid="stWidgetLabel"] {
     font-weight: 600 !important;
 }
 
-/* upload/select を白枠にしない */
 [data-testid="stFileUploader"] {
     background: #13233d !important;
-    border: 1px solid rgba(46, 204, 113, 0.35) !important;
+    border: 1px solid rgba(46, 204, 113, 0.40) !important;
     border-radius: 18px !important;
     padding: 0.55rem !important;
 }
-[data-testid="stFileUploader"] section {
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploaderDropzone"] {
     background: #13233d !important;
-    border: 1px solid rgba(46, 204, 113, 0.28) !important;
+    border: 1px solid rgba(46, 204, 113, 0.32) !important;
     border-radius: 16px !important;
     color: #ffffff !important;
 }
-[data-testid="stFileUploader"] button {
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] span,
+[data-testid="stFileUploader"] div,
+[data-testid="stFileUploader"] p {
+    color: #ffffff !important;
+}
+[data-testid="stFileUploader"] button,
+[data-testid="stBaseButton-secondary"] {
     background: linear-gradient(90deg, #14b76b, #1ed37f) !important;
     color: #ffffff !important;
     font-weight: 800 !important;
     border: none !important;
     border-radius: 14px !important;
 }
-[data-testid="stFileUploader"] * {
-    color: #ffffff !important;
+[data-testid="stFileUploader"] svg {
+    fill: #ffffff !important;
 }
 
 [data-baseweb="select"] > div {
     background: #13233d !important;
     color: #ffffff !important;
-    border: 1px solid rgba(216, 92, 92, 0.42) !important;
+    border: 1px solid rgba(216, 92, 92, 0.45) !important;
     border-radius: 16px !important;
     min-height: 3rem !important;
 }
@@ -189,11 +199,16 @@ label[data-testid="stWidgetLabel"] {
     opacity: 1 !important;
 }
 
-[data-testid="stAlert"] { border-radius: 16px !important; }
-[data-testid="stAlert"] * { color: #ffffff !important; }
-[data-testid="stDataFrame"] * { color: #f8fbff !important; }
+[data-testid="stAlert"] {
+    border-radius: 16px !important;
+}
+[data-testid="stAlert"] * {
+    color: #ffffff !important;
+}
+[data-testid="stDataFrame"] * {
+    color: #f8fbff !important;
+}
 
-/* preview */
 .preview-panel {
     background: #091426;
     border: 1px solid rgba(126, 156, 214, 0.18);
@@ -248,7 +263,6 @@ label[data-testid="stWidgetLabel"] {
 .rank-C { background: #a97115; }
 .rank-D { background: #5a6578; }
 
-/* condition table */
 .cond-table {
     width: 100%;
     border-collapse: collapse;
@@ -273,193 +287,15 @@ label[data-testid="stWidgetLabel"] {
 }
 
 @media (max-width: 720px) {
-    .preview-row { grid-template-columns: 1fr 72px; }
-    .preview-name { font-size: 1.1rem; }
+    .preview-row {
+        grid-template-columns: 1fr 72px;
+    }
+    .preview-name {
+        font-size: 1.1rem;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
-
-
-def read_uploaded_csv(uploaded_file):
-    if uploaded_file is None:
-        return None
-    uploaded_file.seek(0)
-    return pd.read_csv(uploaded_file)
-
-
-def load_thresholds() -> pd.DataFrame:
-    if THRESHOLD_PATH.exists():
-        try:
-            return pd.read_csv(THRESHOLD_PATH)
-        except Exception:
-            return DEFAULT_THRESHOLDS.copy()
-    return DEFAULT_THRESHOLDS.copy()
-
-
-def normalize_text_col(series: pd.Series) -> pd.Series:
-    return series.astype(str).str.replace("\u3000", " ", regex=False).str.strip()
-
-
-def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    rename_map = {
-        "date": "日付",
-        "track": "開催",
-        "raceNo": "R",
-        "race_name": "レース名",
-        "raceName": "レース名",
-        "horseName": "馬名",
-        "horse_name": "馬名",
-        "trainer": "調教師",
-        "sire": "種牡馬",
-        "damSire": "母父馬",
-        "surface": "芝ダ",
-        "distance": "距離",
-        "going": "馬場状態",
-        "popularity": "人気",
-        "finishPosition": "着順",
-        "winOdds": "単勝",
-        "prevTrack": "前開催",
-        "prevDistance": "前距離",
-        "prevGoing": "前走馬場状態",
-        "prevDate": "前走日付",
-        "intervalCategory": "間隔カテゴリ",
-        "distanceChange": "距離変化",
-        "trackChange": "開催変化",
-        "prevJockey": "前騎手",
-        "jockey": "騎手",
-        "distance_band": "距離帯",
-        "going_group": "馬場区分",
-        "track_change": "開催変化",
-        "interval_category": "間隔カテゴリ",
-        "distance_change": "距離変化",
-        "placed": "複勝フラグ",
-        "category": "分類",
-        "trust": "信頼度",
-    }
-    df = df.rename(columns=rename_map)
-    for c in ["馬名", "レース名", "開催", "調教師", "種牡馬", "母父馬", "騎手", "前騎手"]:
-        if c in df.columns:
-            df[c] = normalize_text_col(df[c])
-    return df
-
-
-def ensure_race_key_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    for col in ["日付", "開催", "レース名", "馬名"]:
-        if col not in df.columns:
-            df[col] = ""
-    if "R" not in df.columns:
-        df["R"] = ""
-    return df
-
-
-def parse_surface_distance(value):
-    if pd.isna(value):
-        return "", np.nan
-    s = str(value).strip()
-    if s.startswith("芝"):
-        return "芝", pd.to_numeric(s.replace("芝", ""), errors="coerce")
-    if s.startswith("ダ"):
-        return "ダート", pd.to_numeric(s.replace("ダ", ""), errors="coerce")
-    if s.startswith("障"):
-        return "障害", pd.to_numeric(s.replace("障", ""), errors="coerce")
-    return "", pd.to_numeric(s, errors="coerce")
-
-
-def add_surface_distance_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    if "距離" in df.columns:
-        parsed = df["距離"].apply(parse_surface_distance)
-        if "芝ダ" not in df.columns:
-            df["芝ダ"] = parsed.apply(lambda x: x[0])
-        df["距離数値"] = parsed.apply(lambda x: x[1])
-    else:
-        df["距離数値"] = np.nan
-    return df
-
-
-def get_distance_band(distance):
-    if pd.isna(distance):
-        return "不明"
-    d = float(distance)
-    if d <= 1400:
-        return "短距離"
-    if d <= 1700:
-        return "マイル"
-    if d <= 2000:
-        return "中距離"
-    if d <= 2400:
-        return "中長距離"
-    return "長距離"
-
-
-def get_going_group(going):
-    if pd.isna(going):
-        return "不明"
-    return "良" if str(going).strip() == "良" else "道悪"
-
-
-def get_interval_category(value):
-    if pd.isna(value):
-        return "不明"
-    s = str(value).strip()
-    if not s:
-        return "不明"
-    if "連闘" in s:
-        return "連闘"
-    n = pd.to_numeric("".join(ch for ch in s if ch.isdigit() or ch in ".-"), errors="coerce")
-    if pd.notna(n):
-        if n <= 0:
-            return "連闘"
-        if n <= 2:
-            return "中1〜2週"
-        if n <= 5:
-            return "中3〜5週"
-        if n <= 9:
-            return "中6〜9週"
-        return "10週以上"
-    return "不明"
-
-
-def get_distance_change(curr, prev):
-    curr_num = pd.to_numeric("".join(ch for ch in str(curr) if ch.isdigit()), errors="coerce")
-    prev_num = pd.to_numeric("".join(ch for ch in str(prev) if ch.isdigit()), errors="coerce")
-    if pd.isna(curr_num) or pd.isna(prev_num):
-        return "不明"
-    if curr_num > prev_num:
-        return "延長"
-    if curr_num < prev_num:
-        return "短縮"
-    return "同距離"
-
-
-def get_track_change(curr, prev):
-    if pd.isna(curr) or pd.isna(prev):
-        return "不明"
-    return "同場" if str(curr).strip() == str(prev).strip() else "場替わり"
-
-
-def add_rank(score, thresholds):
-    for _, row in thresholds.iterrows():
-        if score >= row["min_score"] and score < row["max_score"]:
-            return row["rank"]
-    return "D"
-
-
-def classify_rank(rank):
-    return {
-        "S": "本命候補",
-        "A": "相手本線",
-        "B": "強穴",
-        "C": "穴候補",
-        "D": "軽視候補",
-    }.get(str(rank), "軽視候補")
-
-
-def calc_place_flag(series):
-    s = pd.to_numeric(series, errors="coerce")
-    return np.where((s >= 1) & (s <= 3), 1, 0)
 
 
 def build_history_summary(history_df: pd.DataFrame):
@@ -471,10 +307,16 @@ def build_history_summary(history_df: pd.DataFrame):
         df["距離帯"] = df["距離数値"].apply(get_distance_band)
 
     if "馬場区分" not in df.columns:
-        df["馬場区分"] = df["馬場状態"].apply(get_going_group) if "馬場状態" in df.columns else "不明"
+        if "馬場状態" in df.columns:
+            df["馬場区分"] = df["馬場状態"].apply(get_going_group)
+        else:
+            df["馬場区分"] = "不明"
 
     if "間隔カテゴリ" not in df.columns:
-        df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category) if "間隔" in df.columns else "不明"
+        if "間隔" in df.columns:
+            df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category)
+        else:
+            df["間隔カテゴリ"] = "不明"
 
     if "距離変化" not in df.columns:
         if "前距離" in df.columns and "距離" in df.columns:
@@ -543,288 +385,6 @@ def restore_history_backup(uploaded_json):
     payload = json.load(uploaded_json)
     st.session_state.history_df = pd.DataFrame(payload.get("history_rows", []))
     st.session_state.summary_data = payload.get("summary_data", None)
-
-
-def lookup_score(summary_data, map_name, key, min_count=10):
-    data = summary_data.get(map_name, {}).get(key)
-    if not data:
-        return {"score": None, "count": None}
-    count = data.get("count", 0)
-    if count < min_count:
-        return {"score": None, "count": count}
-    return {"score": float(data.get("place_rate", 0)) * 100, "count": count}
-
-
-def apply_strict_s_cap(df: pd.DataFrame, thresholds: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-
-    group_cols = [c for c in ["日付", "開催", "R", "レース名"] if c in df.columns]
-    pieces = []
-
-    for _, g in df.groupby(group_cols, dropna=False):
-        g = g.sort_values("総合点", ascending=False).copy()
-        g["信頼度"] = g["総合点"].apply(lambda x: add_rank(x, thresholds))
-
-        allowed_s = []
-        if len(g) >= 1:
-            top1 = g.iloc[0]
-            if top1["総合点"] >= 72:
-                allowed_s.append(top1.name)
-
-        if len(g) >= 2:
-            top1 = g.iloc[0]
-            top2 = g.iloc[1]
-            if top2["総合点"] >= 70 and (top1["総合点"] - top2["総合点"] <= 1.5):
-                allowed_s.append(top2.name)
-
-        s_idx = g.index[g["信頼度"] == "S"].tolist()
-        for idx in s_idx:
-            if idx not in allowed_s:
-                g.loc[idx, "信頼度"] = "A"
-
-        # allowed_sがゼロでも1位が極端に高くない限りA止まり
-        g["ランク"] = g["信頼度"]
-        g["分類"] = g["信頼度"].apply(classify_rank)
-        pieces.append(g)
-
-    return pd.concat(pieces).sort_index()
-
-
-def prepare_prediction_df(df: pd.DataFrame, summary_data: dict, thresholds: pd.DataFrame) -> pd.DataFrame:
-    df = normalize_columns(df)
-    df = ensure_race_key_columns(df)
-    df = add_surface_distance_columns(df)
-
-    for col in REQUIRED_PRED_COLS:
-        if col not in df.columns:
-            raise ValueError(f"必須列不足: {col}")
-
-    df["距離帯"] = df["距離数値"].apply(get_distance_band)
-    df["馬場区分"] = df["馬場状態"].apply(get_going_group)
-    df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category)
-    df["距離変化"] = df.apply(lambda r: get_distance_change(r.get("距離"), r.get("前距離")), axis=1)
-    df["開催変化"] = df.apply(lambda r: get_track_change(r.get("開催"), r.get("前開催")), axis=1)
-
-    scored_rows = []
-    for _, r in df.iterrows():
-        sire = r.get("種牡馬", "")
-        trainer = r.get("調教師", "")
-        track = r.get("開催", "")
-        dist_band = r.get("距離帯", "")
-        going = r.get("馬場区分", "")
-        interval = r.get("間隔カテゴリ", "")
-        distchg = r.get("距離変化", "")
-        trchg = r.get("開催変化", "")
-
-        s1 = lookup_score(summary_data, "sire_track", f"{sire}|||{track}")
-        s2 = lookup_score(summary_data, "sire_dist", f"{sire}|||{dist_band}")
-        s3 = lookup_score(summary_data, "sire_going", f"{sire}|||{going}")
-
-        t1 = lookup_score(summary_data, "trainer_track", f"{trainer}|||{track}")
-        t2 = lookup_score(summary_data, "trainer_dist", f"{trainer}|||{dist_band}")
-        t3 = lookup_score(summary_data, "trainer_interval", f"{trainer}|||{interval}")
-        t4 = lookup_score(summary_data, "trainer_distchg", f"{trainer}|||{distchg}")
-        t5 = lookup_score(summary_data, "trainer_trackchg", f"{trainer}|||{trchg}")
-
-        v_arr = [x["score"] for x in [s1, s2, s3] if x["score"] is not None]
-        h_arr = [x["score"] for x in [t1, t2, t3, t4, t5] if x["score"] is not None]
-
-        vertical = np.mean(v_arr) if v_arr else 0.0
-        horizontal = np.mean(h_arr) if h_arr else 0.0
-        total = (vertical + horizontal) / 2.0
-
-        counts = [x["count"] for x in [s1, s2, s3, t1, t2, t3, t4, t5] if x["count"] is not None]
-        min_count = int(min(counts)) if counts else ""
-
-        row = r.to_dict()
-        row["縦軸点"] = round(vertical, 1)
-        row["横軸点"] = round(horizontal, 1)
-        row["総合点"] = round(total, 1)
-        row["信頼度"] = add_rank(total, thresholds)
-        row["ランク"] = row["信頼度"]
-        row["分類"] = classify_rank(row["信頼度"])
-        row["縦条件"] = f"{sire} × {track} × {dist_band} × {going}"
-        row["横条件"] = f"{trainer} × {interval} × {distchg} × {trchg}"
-        row["母数"] = min_count
-        scored_rows.append(row)
-
-    out = pd.DataFrame(scored_rows)
-    out = apply_strict_s_cap(out, thresholds)
-
-    sort_cols = [c for c in ["日付", "開催", "R", "レース名"] if c in out.columns]
-    if sort_cols:
-        out = out.sort_values(sort_cols + ["総合点"], ascending=[True] * len(sort_cols) + [False])
-    return out
-
-
-def race_options_from_df(df: pd.DataFrame):
-    need_cols = ["日付", "開催", "レース名"]
-    if not all(c in df.columns for c in need_cols):
-        return []
-    cols = [c for c in ["日付", "開催", "R", "レース名"] if c in df.columns]
-    temp = df[cols].drop_duplicates().fillna("")
-    items = []
-    for _, row in temp.iterrows():
-        label = f"{row.get('日付','')} {row.get('開催','')} {row.get('R','')} {row.get('レース名','')}"
-        items.append((label, row.to_dict()))
-    return items
-
-
-def filter_race_df(df: pd.DataFrame, race_dict: dict) -> pd.DataFrame:
-    out = df.copy()
-    for col, val in race_dict.items():
-        if col in out.columns:
-            out = out[out[col].astype(str) == str(val)]
-    return out.copy()
-
-
-def get_japanese_fontprop():
-    candidates = [
-        "Noto Sans CJK JP", "Noto Sans JP", "IPAexGothic", "IPAGothic",
-        "Yu Gothic", "Hiragino Sans", "TakaoGothic", "MS Gothic"
-    ]
-    for path in fm.findSystemFonts(fontpaths=None, fontext="ttf"):
-        try:
-            name = fm.FontProperties(fname=path).get_name()
-            if name in candidates:
-                return FontProperties(fname=path)
-        except Exception:
-            pass
-    return None
-
-
-def build_race_image_bytes(race_df: pd.DataFrame, title: str) -> bytes:
-    fp = get_japanese_fontprop()
-    fig, ax = plt.subplots(figsize=(8.3, max(6, 1.8 + len(race_df) * 0.48)))
-    fig.patch.set_facecolor("#081324")
-    ax.set_facecolor("#081324")
-    ax.axis("off")
-
-    t = ax.text(0.02, 0.98, title, fontsize=19, fontweight="bold", color="white",
-                transform=ax.transAxes, ha="left", va="top")
-    if fp:
-        t.set_fontproperties(fp)
-
-    cols = [c for c in ["馬名", "信頼度", "分類"] if c in race_df.columns]
-    table_df = race_df[cols].copy()
-
-    table = ax.table(
-        cellText=table_df.values,
-        colLabels=table_df.columns,
-        loc="upper left",
-        cellLoc="left",
-        colLoc="left",
-        bbox=[0, 0, 1, 0.9],
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
-
-    for (r, c), cell in table.get_celld().items():
-        cell.set_edgecolor("#304664")
-        if r == 0:
-            cell.set_facecolor("#12284a")
-            cell.get_text().set_color("white")
-            cell.get_text().set_weight("bold")
-        else:
-            cell.set_facecolor("#0c1b33")
-            cell.get_text().set_color("white")
-        if fp:
-            cell.get_text().set_fontproperties(fp)
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=220, bbox_inches="tight", facecolor=fig.get_facecolor())
-    plt.close(fig)
-    buf.seek(0)
-    return buf.getvalue()
-
-
-def unique_race_count(df: pd.DataFrame) -> int:
-    if df is None or df.empty:
-        return 0
-    cols = [c for c in ["日付", "開催", "R", "レース名"] if c in df.columns]
-    return len(df[cols].drop_duplicates()) if cols else 0
-
-
-def saved_condition_count(summary_data) -> int:
-    if not summary_data:
-        return 0
-    keys = [
-        "sire_track", "sire_dist", "sire_going",
-        "trainer_track", "trainer_dist", "trainer_interval",
-        "trainer_distchg", "trainer_trackchg"
-    ]
-    return sum(len(summary_data.get(k, {})) for k in keys)
-
-
-def render_preview_html(race_df: pd.DataFrame, title: str):
-    subtitle = ""
-    if not race_df.empty:
-        first = race_df.iloc[0]
-        subtitle = f"{first.get('レース名','')} / {first.get('距離','')} / {len(race_df)}頭"
-
-    html = [f'<div class="preview-panel"><div class="preview-title">{title}</div>']
-    if subtitle:
-        html.append(f'<div class="preview-sub">{subtitle}</div>')
-
-    for _, row in race_df.iterrows():
-        rank = str(row.get("信頼度", "D"))
-        category = row.get("分類", "")
-        name = row.get("馬名", "")
-        html.append(
-            f'''
-            <div class="preview-row">
-              <div>
-                <div class="preview-name">{name}</div>
-                <div class="preview-class">{category}</div>
-              </div>
-              <div class="rank-box rank-{rank}">{rank}</div>
-            </div>
-            '''
-        )
-
-    html.append("</div>")
-    st.markdown("".join(html), unsafe_allow_html=True)
-
-
-def render_condition_table(race_df: pd.DataFrame):
-    if race_df.empty:
-        st.info("予想CSVを読み込むと表示されます。")
-        return
-
-    rows = []
-    for _, row in race_df.iterrows():
-        rows.append(
-            f"""
-            <tr>
-              <td>{row.get("馬名","")}</td>
-              <td>{row.get("信頼度","")}</td>
-              <td>{row.get("分類","")}</td>
-              <td class="cond-cond">{row.get("縦条件","")}</td>
-              <td class="cond-cond">{row.get("横条件","")}</td>
-              <td>{row.get("母数","")}</td>
-            </tr>
-            """
-        )
-
-    html = f"""
-    <table class="cond-table">
-      <thead>
-        <tr>
-          <th>馬名</th>
-          <th>信頼度</th>
-          <th>分類</th>
-          <th>縦条件</th>
-          <th>横条件</th>
-          <th>母数</th>
-        </tr>
-      </thead>
-      <tbody>
-        {''.join(rows)}
-      </tbody>
-    </table>
-    """
-    st.markdown(html, unsafe_allow_html=True)
 
 
 st.markdown('<div class="main-title">競馬 ランクアプリ<br>v6.8 New Logic</div>', unsafe_allow_html=True)
@@ -898,6 +458,9 @@ if backup_history:
 if clear_history:
     st.session_state.history_df = None
     st.session_state.summary_data = None
+    st.session_state.ranked_prediction_df = None
+    st.session_state.preview_race_df = None
+    st.session_state.generated_image_bytes = None
     st.success("過去データを削除しました。")
 
 if st.session_state.history_df is not None:
@@ -957,6 +520,25 @@ if import_pred:
             pred_raw = pd.read_csv(pred_file)
             ranked = prepare_prediction_df(pred_raw, st.session_state.summary_data, thresholds)
             st.session_state.ranked_prediction_df = ranked
+
+            current_race_map = dict(race_options_from_df(ranked))
+            preview_df = ranked.copy()
+            preview_title = "レースランキング"
+
+            if selected_race_label and selected_race_label in current_race_map:
+                preview_df = filter_race_df(ranked, current_race_map[selected_race_label])
+                preview_title = selected_race_label
+            else:
+                race_list = race_options_from_df(ranked)
+                if race_list:
+                    first_label, first_dict = race_list[0]
+                    preview_df = filter_race_df(ranked, first_dict)
+                    preview_title = first_label
+
+            st.session_state.preview_race_df = preview_df
+            st.session_state.preview_title = preview_title
+            st.session_state.generated_image_bytes = build_race_image_bytes(preview_df, preview_title)
+
             st.success(f"予想CSV読込完了: {len(ranked):,}頭 / {unique_race_count(ranked)}レース")
         except Exception as e:
             st.error(f"予想CSVの読み込みでエラーが出ました: {e}")
@@ -966,17 +548,31 @@ if st.session_state.ranked_prediction_df is not None:
     current_race_map = dict(race_options_from_df(ranked_df))
 
     show_df = ranked_df.copy()
+    current_title = st.session_state.preview_title
+
     if selected_race_label and selected_race_label in current_race_map:
         show_df = filter_race_df(ranked_df, current_race_map[selected_race_label])
+        current_title = selected_race_label
 
-    if make_image:
-        st.session_state.preview_race_df = show_df.copy()
-        st.session_state.generated_image_bytes = build_race_image_bytes(show_df, selected_race_label or "レースランキング")
-        st.success("画像を作成しました。")
+    st.session_state.preview_race_df = show_df.copy()
+    st.session_state.preview_title = current_title
 
-    st.markdown(f'<div class="small-note">予想CSV読込完了: {len(ranked_df):,}頭 / {unique_race_count(ranked_df)}レース</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="small-note">予想CSV読込完了: {len(ranked_df):,}頭 / {unique_race_count(ranked_df)}レース</div>',
+        unsafe_allow_html=True
+    )
 else:
     st.markdown('<div class="small-note">まだ読み込んでいません。</div>', unsafe_allow_html=True)
+
+if make_image:
+    if st.session_state.preview_race_df is None or st.session_state.preview_race_df.empty:
+        st.error("先に予想CSVを読み込んでください。")
+    else:
+        st.session_state.generated_image_bytes = build_race_image_bytes(
+            st.session_state.preview_race_df,
+            st.session_state.preview_title
+        )
+        st.success("画像を作成しました。")
 
 if save_image:
     if st.session_state.generated_image_bytes is None:
@@ -992,7 +588,7 @@ if save_image:
 
 st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
 if st.session_state.preview_race_df is not None and not st.session_state.preview_race_df.empty:
-    render_preview_html(st.session_state.preview_race_df, selected_race_label or "レースランキング")
+    render_preview_html(st.session_state.preview_race_df, st.session_state.preview_title)
 else:
     st.markdown('<div class="preview-panel"><div class="preview-sub">予想CSVを読み込んでください</div></div>', unsafe_allow_html=True)
 
@@ -1010,12 +606,24 @@ prediction_horse_count = len(st.session_state.ranked_prediction_df) if st.sessio
 st.markdown('<div class="section-card"><div class="section-title">集計状況</div></div>', unsafe_allow_html=True)
 c1, c2 = st.columns(2)
 with c1:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">保存済み履歴件数</div><div class="metric-value">{history_count}</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="metric-card"><div class="metric-label">保存済み履歴件数</div><div class="metric-value">{history_count}</div></div>',
+        unsafe_allow_html=True
+    )
 with c2:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">保存済み条件数</div><div class="metric-value">{condition_count}</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="metric-card"><div class="metric-label">保存済み条件数</div><div class="metric-value">{condition_count}</div></div>',
+        unsafe_allow_html=True
+    )
 
 c3, c4 = st.columns(2)
 with c3:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">予想CSVレース数</div><div class="metric-value">{prediction_race_count}</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="metric-card"><div class="metric-label">予想CSVレース数</div><div class="metric-value">{prediction_race_count}</div></div>',
+        unsafe_allow_html=True
+    )
 with c4:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">予想CSV馬数</div><div class="metric-value">{prediction_horse_count}</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="metric-card"><div class="metric-label">予想CSV馬数</div><div class="metric-value">{prediction_horse_count}</div></div>',
+        unsafe_allow_html=True
+    )
