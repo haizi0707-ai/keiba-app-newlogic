@@ -33,175 +33,212 @@ if "generated_image_bytes" not in st.session_state:
 st.markdown("""
 <style>
 html, body, [data-testid="stAppViewContainer"] {
-    background: linear-gradient(180deg, #091426 0%, #0b1730 100%);
-    color: #f6f9ff;
+    background: linear-gradient(180deg, #071223 0%, #0a1730 100%);
 }
 
 [data-testid="stHeader"] {
-    background: rgba(0, 0, 0, 0);
+    background: rgba(0,0,0,0);
 }
 
 .block-container {
-    max-width: 1100px;
-    padding-top: 1.2rem;
+    max-width: 1080px;
+    padding-top: 1.1rem;
     padding-bottom: 3rem;
 }
 
 .main-title {
-    font-size: 2.8rem;
+    font-size: 2.75rem;
     font-weight: 800;
     color: #ffffff;
-    margin-bottom: 0.2rem;
+    line-height: 1.2;
+    margin-bottom: 0.4rem;
 }
 
 .sub-title {
-    color: #d9e6ff;
-    font-size: 1.1rem;
-    margin-bottom: 1.1rem;
-    line-height: 1.8;
+    color: #dce8ff;
+    font-size: 1.08rem;
+    line-height: 1.85;
+    margin-bottom: 1rem;
 }
 
 .info-box {
-    background: rgba(177, 210, 255, 0.10);
-    border: 1px solid rgba(177, 210, 255, 0.22);
+    background: rgba(166, 198, 255, 0.10);
+    border: 1px solid rgba(166, 198, 255, 0.22);
     border-radius: 22px;
     padding: 1.2rem 1.3rem;
-    color: #f4f8ff;
-    margin-bottom: 1.3rem;
-    line-height: 1.9;
+    color: #f5f9ff;
     font-size: 1.05rem;
+    line-height: 1.95;
+    margin-bottom: 1.2rem;
 }
 
-.card-wrap {
-    background: linear-gradient(180deg, rgba(10,20,40,0.96) 0%, rgba(8,16,32,0.96) 100%);
-    border: 1px solid rgba(120, 150, 210, 0.22);
+.section-card {
+    background: linear-gradient(180deg, rgba(10,20,40,0.97) 0%, rgba(8,16,32,0.97) 100%);
+    border: 1px solid rgba(122, 154, 214, 0.20);
     border-radius: 24px;
-    padding: 1.2rem 1.2rem 1rem 1.2rem;
-    margin-bottom: 1.3rem;
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 10px 30px rgba(0,0,0,0.18);
+    padding: 1.15rem 1.15rem 1rem 1.15rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.16);
 }
 
-.card-title {
+.section-title {
     color: #ffffff;
-    font-size: 1.9rem;
+    font-size: 1.85rem;
     font-weight: 800;
-    margin-bottom: 0.8rem;
+    margin: 0;
 }
 
 .small-note {
-    color: #e5eeff !important;
-    font-size: 1rem !important;
-    font-weight: 500 !important;
-}
-
-p, label, div, span {
-    color: #f4f8ff;
-}
-
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stExpander"] summary,
-label[data-testid="stWidgetLabel"] {
-    color: #f5f9ff !important;
-    font-weight: 600 !important;
-}
-
-.stButton > button,
-.stDownloadButton > button {
-    border-radius: 18px !important;
-    font-weight: 800 !important;
-    padding: 0.8rem 1rem !important;
-    border: none !important;
-}
-
-.green-btn button {
-    background: linear-gradient(90deg, #11b77d, #27c88f) !important;
-    color: white !important;
-}
-
-.orange-btn button {
-    background: linear-gradient(90deg, #c88710, #e7a11c) !important;
-    color: white !important;
-}
-
-.red-btn button {
-    background: linear-gradient(90deg, #ba4d4d, #d95a5a) !important;
-    color: white !important;
-}
-
-.dark-btn button {
-    background: rgba(255,255,255,0.08) !important;
-    color: white !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
-}
-
-.stButton > button:disabled,
-.stDownloadButton > button:disabled {
-    background: rgba(255,255,255,0.15) !important;
-    color: #dfe9ff !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
-    opacity: 1 !important;
-}
-
-[data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 18px;
-    padding: 0.45rem 0.55rem;
-}
-
-[data-testid="stFileUploader"] * {
-    color: #f4f8ff !important;
-}
-
-[data-baseweb="select"] > div {
-    background: rgba(255,255,255,0.06) !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
-    border-radius: 16px !important;
-}
-
-[data-baseweb="select"] span {
-    color: #ffffff !important;
-}
-
-[data-testid="stDataFrame"] * {
-    color: #f8fbff !important;
+    color: #e5efff;
+    font-size: 1rem;
+    font-weight: 500;
 }
 
 .metric-card {
     background: linear-gradient(180deg, rgba(12,22,42,0.98) 0%, rgba(10,18,36,0.98) 100%);
-    border: 1px solid rgba(130, 160, 220, 0.22);
-    border-radius: 24px;
-    padding: 1rem 1rem 1.1rem 1rem;
+    border: 1px solid rgba(130, 160, 220, 0.20);
+    border-radius: 22px;
+    padding: 1rem;
     margin-bottom: 1rem;
 }
 
 .metric-label {
-    color: #d6e4ff;
+    color: #dbe7ff;
     font-size: 1rem;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.25rem;
 }
 
 .metric-value {
-    color: white;
-    font-size: 2.3rem;
+    color: #ffffff;
+    font-size: 2.25rem;
     font-weight: 800;
     line-height: 1.1;
 }
 
+/* Markdown/expander labels */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stExpander"] summary,
+label[data-testid="stWidgetLabel"] {
+    color: #f6f9ff !important;
+    font-weight: 600 !important;
+}
+
+/* File uploader */
+[data-testid="stFileUploader"] {
+    background: #15233a !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 18px !important;
+    padding: 0.5rem 0.55rem !important;
+}
+
+[data-testid="stFileUploader"] section {
+    background: #15233a !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 16px !important;
+    color: #f7fbff !important;
+}
+
+[data-testid="stFileUploader"] button {
+    background: #eef4ff !important;
+    color: #13213a !important;
+    font-weight: 700 !important;
+    border: none !important;
+    border-radius: 14px !important;
+}
+
+[data-testid="stFileUploader"] * {
+    color: #f7fbff !important;
+}
+
+/* Selectbox */
+[data-baseweb="select"] > div {
+    background: #15233a !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 16px !important;
+    min-height: 3rem !important;
+}
+
+[data-baseweb="select"] * {
+    color: #ffffff !important;
+}
+
+/* Buttons */
+.stButton > button,
+.stDownloadButton > button {
+    border-radius: 18px !important;
+    font-weight: 800 !important;
+    padding: 0.82rem 1rem !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.green-btn button {
+    background: linear-gradient(90deg, #12b77f, #26ca90) !important;
+    color: #ffffff !important;
+}
+
+.orange-btn button {
+    background: linear-gradient(90deg, #cb8912, #eba41d) !important;
+    color: #ffffff !important;
+}
+
+.red-btn button {
+    background: linear-gradient(90deg, #b94e4e, #d85c5c) !important;
+    color: #ffffff !important;
+}
+
+.dark-btn button {
+    background: #273750 !important;
+    color: #eef4ff !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+.stButton > button:disabled,
+.stDownloadButton > button:disabled {
+    background: #26364e !important;
+    color: #dce8ff !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    opacity: 1 !important;
+}
+
+/* Alerts */
+[data-testid="stAlert"] {
+    border-radius: 16px !important;
+}
+[data-testid="stAlert"] * {
+    color: #ffffff !important;
+}
+
+/* Dataframe */
+[data-testid="stDataFrame"] * {
+    color: #f8fbff !important;
+}
+
+/* Rank pill */
 .rank-pill {
     display: inline-block;
-    padding: 0.2rem 0.65rem;
+    padding: 0.22rem 0.68rem;
     border-radius: 999px;
     font-weight: 800;
     font-size: 0.85rem;
     color: white;
 }
-.rank-S { background: #8d67ff; }
-.rank-A { background: #1db273; }
-.rank-B { background: #2b8dde; }
-.rank-C { background: #d99716; }
+.rank-S { background: #8b65ff; }
+.rank-A { background: #1eb173; }
+.rank-B { background: #2b8ddd; }
+.rank-C { background: #d79717; }
 .rank-D { background: #c65454; }
+
+/* Preview placeholder */
+.preview-box {
+    background: #071223;
+    border: 1px solid rgba(126, 156, 214, 0.16);
+    border-radius: 20px;
+    min-height: 320px;
+    padding: 1rem;
+    color: #f5f9ff;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -384,7 +421,7 @@ def rank_badge(rank: str) -> str:
     return f'<span class="rank-pill {cls}">{rank}</span>'
 
 # =========================
-# 集計系
+# 集計関数
 # =========================
 def make_axis_summary_tables(history_df: pd.DataFrame):
     df = history_df.copy()
@@ -401,8 +438,6 @@ def make_axis_summary_tables(history_df: pd.DataFrame):
     else:
         df["単回収"] = 0
 
-    out = {}
-
     def make_group(keys):
         if not set(keys).issubset(df.columns):
             return pd.DataFrame()
@@ -412,18 +447,17 @@ def make_axis_summary_tables(history_df: pd.DataFrame):
             .reset_index()
         )
 
-    out["sire_track"] = make_group(["種牡馬", "開催"])
-    out["sire_dist"] = make_group(["種牡馬", "距離帯"])
-    out["sire_going"] = make_group(["種牡馬", "馬場区分"])
-
-    out["trainer_track"] = make_group(["調教師", "開催"])
-    out["trainer_dist"] = make_group(["調教師", "距離帯"])
-    out["trainer_interval"] = make_group(["調教師", "間隔カテゴリ"])
-    out["trainer_distchg"] = make_group(["調教師", "距離変化"])
-    out["trainer_trackchg"] = make_group(["調教師", "開催変化"])
-    out["trainer_jchg"] = make_group(["調教師", "騎手変化"])
-
-    return out
+    return {
+        "sire_track": make_group(["種牡馬", "開催"]),
+        "sire_dist": make_group(["種牡馬", "距離帯"]),
+        "sire_going": make_group(["種牡馬", "馬場区分"]),
+        "trainer_track": make_group(["調教師", "開催"]),
+        "trainer_dist": make_group(["調教師", "距離帯"]),
+        "trainer_interval": make_group(["調教師", "間隔カテゴリ"]),
+        "trainer_distchg": make_group(["調教師", "距離変化"]),
+        "trainer_trackchg": make_group(["調教師", "開催変化"]),
+        "trainer_jchg": make_group(["調教師", "騎手変化"]),
+    }
 
 def score_from_summary(base_df: pd.DataFrame, summary_df: pd.DataFrame, keys: list, min_count=10):
     if summary_df.empty:
@@ -473,16 +507,10 @@ def prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
         df["距離帯"] = df["距離数値"].apply(get_distance_band)
 
     if "馬場区分" not in df.columns:
-        if "馬場状態" in df.columns:
-            df["馬場区分"] = df["馬場状態"].apply(get_going_group)
-        else:
-            df["馬場区分"] = "不明"
+        df["馬場区分"] = df["馬場状態"].apply(get_going_group) if "馬場状態" in df.columns else "不明"
 
     if "間隔カテゴリ" not in df.columns:
-        if "間隔" in df.columns:
-            df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category)
-        else:
-            df["間隔カテゴリ"] = "不明"
+        df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category) if "間隔" in df.columns else "不明"
 
     if "距離変化" not in df.columns:
         if "前距離" in df.columns and "距離数値" in df.columns:
@@ -513,16 +541,10 @@ def prepare_prediction_df(df: pd.DataFrame, history_df: pd.DataFrame, thresholds
         df["距離帯"] = df["距離数値"].apply(get_distance_band)
 
     if "馬場区分" not in df.columns:
-        if "馬場状態" in df.columns:
-            df["馬場区分"] = df["馬場状態"].apply(get_going_group)
-        else:
-            df["馬場区分"] = "不明"
+        df["馬場区分"] = df["馬場状態"].apply(get_going_group) if "馬場状態" in df.columns else "不明"
 
     if "間隔カテゴリ" not in df.columns:
-        if "間隔" in df.columns:
-            df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category)
-        else:
-            df["間隔カテゴリ"] = "不明"
+        df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category) if "間隔" in df.columns else "不明"
 
     if "距離変化" not in df.columns:
         if "前距離" in df.columns and "距離数値" in df.columns:
@@ -544,12 +566,10 @@ def prepare_prediction_df(df: pd.DataFrame, history_df: pd.DataFrame, thresholds
 
     summaries = make_axis_summary_tables(history_df)
 
-    # 縦軸
     df["score_sire_track"] = score_from_summary(df, summaries["sire_track"], ["種牡馬", "開催"])
     df["score_sire_dist"] = score_from_summary(df, summaries["sire_dist"], ["種牡馬", "距離帯"])
     df["score_sire_going"] = score_from_summary(df, summaries["sire_going"], ["種牡馬", "馬場区分"])
 
-    # 横軸
     df["score_trainer_track"] = score_from_summary(df, summaries["trainer_track"], ["調教師", "開催"])
     df["score_trainer_dist"] = score_from_summary(df, summaries["trainer_dist"], ["調教師", "距離帯"])
     df["score_trainer_interval"] = score_from_summary(df, summaries["trainer_interval"], ["調教師", "間隔カテゴリ"])
@@ -557,7 +577,6 @@ def prepare_prediction_df(df: pd.DataFrame, history_df: pd.DataFrame, thresholds
     df["score_trainer_trackchg"] = score_from_summary(df, summaries["trainer_trackchg"], ["調教師", "開催変化"])
     df["score_trainer_jchg"] = score_from_summary(df, summaries["trainer_jchg"], ["調教師", "騎手変化"])
 
-    # 母数
     df["count_sire_track"] = count_from_summary(df, summaries["sire_track"], ["種牡馬", "開催"])
     df["count_sire_dist"] = count_from_summary(df, summaries["sire_dist"], ["種牡馬", "距離帯"])
     df["count_sire_going"] = count_from_summary(df, summaries["sire_going"], ["種牡馬", "馬場区分"])
@@ -603,7 +622,7 @@ def prepare_prediction_df(df: pd.DataFrame, history_df: pd.DataFrame, thresholds
     return df
 
 # =========================
-# レース選択/画像
+# レース選択 / 画像
 # =========================
 def race_options_from_df(df: pd.DataFrame):
     need_cols = ["日付", "開催", "レース名"]
@@ -630,9 +649,8 @@ def build_race_image_bytes(race_df: pd.DataFrame, title: str) -> bytes:
         show_cols = [c for c in ["馬名", "縦軸点", "横軸点", "総合点", "ランク"] if c in race_df.columns]
 
     plot_df = race_df[show_cols].copy()
-
     rows = len(plot_df)
-    fig_h = max(4.6, 1.0 + rows * 0.48)
+    fig_h = max(4.8, 1.0 + rows * 0.48)
 
     fig, ax = plt.subplots(figsize=(10, fig_h))
     fig.patch.set_facecolor("#081324")
@@ -653,7 +671,6 @@ def build_race_image_bytes(race_df: pd.DataFrame, title: str) -> bytes:
         colLoc="center",
         bbox=[0.0, 0.0, 1.0, 0.95],
     )
-
     table.auto_set_font_size(False)
     table.set_fontsize(11)
 
@@ -710,12 +727,11 @@ with st.expander("ランク基準を見る"):
 # =========================
 # 過去データ
 # =========================
-st.markdown('<div class="card-wrap"><div class="card-title">過去レースCSV（収集用）</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-card"><div class="section-title">過去レースCSV（収集用）</div></div>', unsafe_allow_html=True)
 
 history_file = st.file_uploader("過去レースCSV", type=["csv"], key="history_uploader", label_visibility="collapsed")
 
 col1, col2, col3 = st.columns(3)
-
 with col1:
     st.markdown('<div class="green-btn">', unsafe_allow_html=True)
     import_history = st.button("過去レースCSVを取り込む", use_container_width=True)
@@ -733,9 +749,8 @@ with col3:
 
 if import_history and history_file is not None:
     raw_history = pd.read_csv(history_file)
-    prepared_history = prepare_history_df(raw_history)
-    st.session_state.history_df = prepared_history
-    st.success(f"過去データを取り込みました。件数: {len(prepared_history):,}")
+    st.session_state.history_df = prepare_history_df(raw_history)
+    st.success(f"過去データを取り込みました。件数: {len(st.session_state.history_df):,}")
 
 if clear_history:
     st.session_state.history_df = None
@@ -762,10 +777,11 @@ else:
 # =========================
 # 予想データ
 # =========================
-st.markdown('<div class="card-wrap"><div class="card-title">予想レースCSV（画像化用）</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-card"><div class="section-title">予想レースCSV（画像化用）</div></div>', unsafe_allow_html=True)
 
 pred_file = st.file_uploader("予想レースCSV", type=["csv"], key="pred_uploader", label_visibility="collapsed")
 
+race_options = []
 race_labels = []
 selected_race_label = None
 
@@ -778,8 +794,6 @@ if pred_file is not None and st.session_state.history_df is not None:
 elif st.session_state.ranked_prediction_df is not None:
     race_options = race_options_from_df(st.session_state.ranked_prediction_df)
     race_labels = [x[0] for x in race_options]
-else:
-    race_options = []
 
 if race_labels:
     selected_race_label = st.selectbox("対象レース", race_labels)
@@ -787,7 +801,6 @@ else:
     st.selectbox("対象レース", ["先にCSVを読み込んでください"], disabled=True)
 
 c1, c2, c3 = st.columns(3)
-
 with c1:
     st.markdown('<div class="green-btn">', unsafe_allow_html=True)
     import_pred = st.button("予想CSVを読み込む", use_container_width=True)
@@ -810,14 +823,16 @@ if import_pred:
         st.error("予想CSVを選択してください。")
     else:
         pred_raw = pd.read_csv(pred_file)
-        ranked_pred = prepare_prediction_df(pred_raw, st.session_state.history_df, DEFAULT_THRESHOLDS)
-        st.session_state.ranked_prediction_df = ranked_pred
-        st.success(f"予想データを読み込みました。件数: {len(ranked_pred):,}")
+        st.session_state.ranked_prediction_df = prepare_prediction_df(
+            pred_raw,
+            st.session_state.history_df,
+            DEFAULT_THRESHOLDS
+        )
+        st.success(f"予想データを読み込みました。件数: {len(st.session_state.ranked_prediction_df):,}")
 
 if st.session_state.ranked_prediction_df is not None:
     ranked_df = st.session_state.ranked_prediction_df.copy()
-    current_race_options = race_options_from_df(ranked_df)
-    current_race_map = dict(current_race_options)
+    current_race_map = dict(race_options_from_df(ranked_df))
 
     show_df = ranked_df.copy()
     if selected_race_label and selected_race_label in current_race_map:
@@ -842,8 +857,7 @@ if make_image:
         st.error("先に予想CSVを読み込んでください。")
     else:
         ranked_df = st.session_state.ranked_prediction_df.copy()
-        current_race_options = race_options_from_df(ranked_df)
-        current_race_map = dict(current_race_options)
+        current_race_map = dict(race_options_from_df(ranked_df))
 
         if selected_race_label and selected_race_label in current_race_map:
             race_df = filter_race_df(ranked_df, current_race_map[selected_race_label])
@@ -870,23 +884,21 @@ if save_image:
 # =========================
 # 画像プレビュー
 # =========================
-st.markdown('<div class="card-wrap"><div class="card-title">画像プレビュー</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
 
 if st.session_state.generated_image_bytes is not None:
     st.image(st.session_state.generated_image_bytes, caption="生成画像", use_container_width=True)
 else:
-    st.markdown("**予想CSVを読み込んでください**")
-    st.markdown("<div style='height:320px;'></div>", unsafe_allow_html=True)
+    st.markdown('<div class="preview-box"><b>予想CSVを読み込んでください</b></div>', unsafe_allow_html=True)
 
 # =========================
 # 画像外の条件集計
 # =========================
-st.markdown('<div class="card-wrap"><div class="card-title">画像外の条件集計</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-card"><div class="section-title">画像外の条件集計</div></div>', unsafe_allow_html=True)
 
 if st.session_state.ranked_prediction_df is not None:
     ranked_df = st.session_state.ranked_prediction_df.copy()
-    current_race_options = race_options_from_df(ranked_df)
-    current_race_map = dict(current_race_options)
+    current_race_map = dict(race_options_from_df(ranked_df))
 
     summary_df = ranked_df.copy()
     if selected_race_label and selected_race_label in current_race_map:
@@ -908,7 +920,7 @@ condition_count = saved_condition_count(st.session_state.history_df)
 prediction_race_count = unique_race_count(st.session_state.ranked_prediction_df)
 prediction_horse_count = len(st.session_state.ranked_prediction_df) if st.session_state.ranked_prediction_df is not None else 0
 
-st.markdown('<div class="card-wrap"><div class="card-title">集計状況</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-card"><div class="section-title">集計状況</div></div>', unsafe_allow_html=True)
 
 c1, c2 = st.columns(2)
 with c1:
