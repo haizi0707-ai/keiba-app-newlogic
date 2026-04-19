@@ -1,0 +1,6 @@
+rank,min_score,max_score
+S,28,999
+A,24,28
+B,22,24
+C,20,22
+D,-999,20
