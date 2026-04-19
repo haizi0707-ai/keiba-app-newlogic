@@ -165,30 +165,19 @@ label[data-testid="stWidgetLabel"] {
     font-size: 1rem !important;
 }
 
-.green-btn button {
-    background: linear-gradient(90deg, #12b77f, #26ca90) !important;
-    color: #ffffff !important;
-}
-
-.orange-btn button {
-    background: linear-gradient(90deg, #cb8912, #eba41d) !important;
-    color: #ffffff !important;
-}
-
-.red-btn button {
-    background: linear-gradient(90deg, #b94e4e, #d85c5c) !important;
-    color: #ffffff !important;
-}
-
+/* すべて赤系で統一 */
+.green-btn button,
+.orange-btn button,
+.red-btn button,
 .dark-btn button {
-    background: #314564 !important;
+    background: linear-gradient(90deg, #b94e4e, #d85c5c) !important;
     color: #ffffff !important;
     border: 1px solid rgba(255,255,255,0.14) !important;
 }
 
 .stButton > button:disabled,
 .stDownloadButton > button:disabled {
-    background: #5c6f8f !important;
+    background: #7d4d57 !important;
     color: #ffffff !important;
     border: 1px solid rgba(255,255,255,0.18) !important;
     opacity: 1 !important;
@@ -229,6 +218,13 @@ label[data-testid="stWidgetLabel"] {
 }
 </style>
 """, unsafe_allow_html=True)
+
+
+def read_uploaded_csv(uploaded_file):
+    if uploaded_file is None:
+        return None
+    uploaded_file.seek(0)
+    return pd.read_csv(uploaded_file)
 
 
 def normalize_text_col(series: pd.Series) -> pd.Series:
@@ -741,9 +737,15 @@ with col3:
     st.markdown('</div>', unsafe_allow_html=True)
 
 if import_history and history_file is not None:
-    raw_history = pd.read_csv(history_file)
-    st.session_state.history_df = prepare_history_df(raw_history)
-    st.success(f"過去データを取り込みました。件数: {len(st.session_state.history_df):,}")
+    try:
+        raw_history = read_uploaded_csv(history_file)
+        if raw_history is None or raw_history.empty:
+            st.error("過去レースCSVが空です。")
+        else:
+            st.session_state.history_df = prepare_history_df(raw_history)
+            st.success(f"過去データを取り込みました。件数: {len(st.session_state.history_df):,}")
+    except Exception as e:
+        st.error(f"過去データの読み込みでエラーが出ました: {e}")
 
 if clear_history:
     st.session_state.history_df = None
@@ -776,11 +778,16 @@ race_labels = []
 selected_race_label = None
 
 if pred_file is not None and st.session_state.history_df is not None:
-    tmp_pred = pd.read_csv(pred_file)
-    tmp_pred = normalize_columns(tmp_pred)
-    tmp_pred = ensure_race_key_columns(tmp_pred)
-    race_options = race_options_from_df(tmp_pred)
-    race_labels = [x[0] for x in race_options]
+    try:
+        tmp_pred = read_uploaded_csv(pred_file)
+        if tmp_pred is not None and not tmp_pred.empty:
+            tmp_pred = normalize_columns(tmp_pred)
+            tmp_pred = ensure_race_key_columns(tmp_pred)
+            race_options = race_options_from_df(tmp_pred)
+            race_labels = [x[0] for x in race_options]
+    except Exception:
+        race_options = []
+        race_labels = []
 elif st.session_state.ranked_prediction_df is not None:
     race_options = race_options_from_df(st.session_state.ranked_prediction_df)
     race_labels = [x[0] for x in race_options]
@@ -812,13 +819,19 @@ if import_pred:
     elif pred_file is None:
         st.error("予想CSVを選択してください。")
     else:
-        pred_raw = pd.read_csv(pred_file)
-        st.session_state.ranked_prediction_df = prepare_prediction_df(
-            pred_raw,
-            st.session_state.history_df,
-            DEFAULT_THRESHOLDS
-        )
-        st.success(f"予想データを読み込みました。件数: {len(st.session_state.ranked_prediction_df):,}")
+        try:
+            pred_raw = read_uploaded_csv(pred_file)
+            if pred_raw is None or pred_raw.empty:
+                st.error("予想CSVが空です。中身のあるCSVを選択してください。")
+            else:
+                st.session_state.ranked_prediction_df = prepare_prediction_df(
+                    pred_raw,
+                    st.session_state.history_df,
+                    DEFAULT_THRESHOLDS
+                )
+                st.success(f"予想データを読み込みました。件数: {len(st.session_state.ranked_prediction_df):,}")
+        except Exception as e:
+            st.error(f"予想CSVの読み込みでエラーが出ました: {e}")
 
 if st.session_state.ranked_prediction_df is not None:
     ranked_df = st.session_state.ranked_prediction_df.copy()
