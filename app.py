@@ -1,15 +1,10 @@
-import json
-from pathlib import Path
 
-import numpy as np
+import json
 import pandas as pd
+import numpy as np
 import streamlit as st
 
-st.set_page_config(page_title="競馬 ランクアプリ v6.9 Rebuild", layout="wide")
-
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-DATA_DIR.mkdir(exist_ok=True)
+st.set_page_config(page_title="競馬 ランクアプリ v7.0 Narrow Model", layout="wide")
 
 DEFAULT_STATE = {
     "history_df": None,
@@ -30,46 +25,47 @@ html, body, [data-testid="stAppViewContainer"] { background: linear-gradient(180
 .block-container { max-width: 1120px; padding-top: 1rem; padding-bottom: 3rem; }
 .main-title { font-size: 2.1rem; font-weight: 800; color: #ffffff; line-height: 1.25; margin-bottom: 0.35rem; }
 .sub-title { color: #dce9ff; font-size: 1rem; line-height: 1.8; margin-bottom: 1rem; }
-.info-box { background: rgba(166, 198, 255, 0.12); border: 1px solid rgba(166, 198, 255, 0.24); border-radius: 20px; padding: 1.1rem 1.15rem; color: #ffffff; font-size: 1rem; line-height: 1.9; margin-bottom: 1rem; }
-.section-card { background: linear-gradient(180deg, rgba(10,20,40,0.97) 0%, rgba(8,16,32,0.97) 100%); border: 1px solid rgba(122,154,214,0.22); border-radius: 24px; padding: 1rem 1rem 0.9rem 1rem; margin-bottom: 1rem; box-shadow: 0 8px 28px rgba(0,0,0,0.16); }
-.section-title { color: #ffffff; font-size: 1.45rem; font-weight: 800; margin: 0; }
-.small-note { color: #eef4ff; font-size: 1rem; font-weight: 600; }
-.metric-card { background: linear-gradient(180deg, rgba(12,22,42,0.98) 0%, rgba(10,18,36,0.98) 100%); border: 1px solid rgba(130,160,220,0.20); border-radius: 22px; padding: 1rem; margin-bottom: 1rem; }
-.metric-label { color: #dbe7ff; font-size: 1rem; margin-bottom: 0.25rem; }
-.metric-value { color: #ffffff; font-size: 2.2rem; font-weight: 800; line-height: 1.1; }
-[data-testid="stMarkdownContainer"] p, [data-testid="stExpander"] summary, label[data-testid="stWidgetLabel"] { color: #f8fbff !important; font-weight: 600 !important; }
-[data-testid="stFileUploader"] { background: #13233d !important; border: 1px solid rgba(46, 204, 113, 0.40) !important; border-radius: 18px !important; padding: 0.55rem !important; }
-[data-testid="stFileUploader"] section, [data-testid="stFileUploaderDropzone"] { background: #13233d !important; border: 1px solid rgba(46, 204, 113, 0.32) !important; border-radius: 16px !important; color: #ffffff !important; }
-[data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div, [data-testid="stFileUploader"] p { color: #ffffff !important; }
-[data-testid="stFileUploader"] button, [data-testid="stBaseButton-secondary"] { background: linear-gradient(90deg, #14b76b, #1ed37f) !important; color: #ffffff !important; font-weight: 800 !important; border: none !important; border-radius: 14px !important; }
-[data-testid="stFileUploader"] svg { fill: #ffffff !important; }
-[data-baseweb="select"] > div { background: #13233d !important; color: #ffffff !important; border: 1px solid rgba(216,92,92,0.45) !important; border-radius: 16px !important; min-height: 3rem !important; }
-[data-baseweb="select"] * { color: #ffffff !important; }
-.stButton > button, .stDownloadButton > button { border-radius: 18px !important; font-weight: 800 !important; padding: 0.82rem 1rem !important; border: none !important; box-shadow: none !important; font-size: 1rem !important; }
-.green-btn button { background: linear-gradient(90deg, #14b76b, #1ed37f) !important; color: #ffffff !important; }
-.orange-btn button { background: linear-gradient(90deg, #cc8b16, #f0a21a) !important; color: #ffffff !important; }
-.red-btn button { background: linear-gradient(90deg, #b94e4e, #d85c5c) !important; color: #ffffff !important; }
-.dark-btn button { background: #1f3151 !important; color: #ffffff !important; border: 1px solid rgba(255,255,255,0.12) !important; }
-.stButton > button:disabled, .stDownloadButton > button:disabled { background: #6b7280 !important; color: #f8fbff !important; border: 1px solid rgba(255,255,255,0.18) !important; opacity: 1 !important; }
-[data-testid="stAlert"] { border-radius: 16px !important; }
-[data-testid="stAlert"] * { color: #ffffff !important; }
-.preview-panel { background: #091426; border: 1px solid rgba(126,156,214,0.18); border-radius: 20px; padding: 1rem; }
-.preview-title { font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.25rem; }
-.preview-sub { color: #cfdcff; font-size: 1rem; margin-bottom: 1rem; }
-.preview-row { display: grid; grid-template-columns: 1fr 90px; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 16px; margin-bottom: 8px; background: rgba(255,255,255,0.03); }
-.preview-name { color: #ffffff; font-size: 1.35rem; font-weight: 800; line-height: 1.2; }
-.preview-class { color: #cdd9f4; font-size: 0.95rem; margin-top: 4px; }
-.rank-box { text-align: center; border-radius: 14px; padding: 8px 0; font-weight: 800; font-size: 1.35rem; color: #f7fbff; background: #1d2b46; border: 1px solid rgba(120,160,220,0.22); }
-.rank-S { background: #4c2fa8; } .rank-A { background: #1f8b58; } .rank-B { background: #2c6eb8; } .rank-C { background: #a97115; } .rank-D { background: #5a6578; }
-.cond-table { width: 100%; border-collapse: collapse; }
-.cond-table th, .cond-table td { text-align: left; padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #f8fbff; vertical-align: top; }
-.cond-table th { color: #ffffff; font-size: 1rem; font-weight: 700; }
-.cond-cond { font-size: 0.92rem; color: #d7e5ff; line-height: 1.45; word-break: break-word; }
-@media (max-width: 720px) { .preview-row { grid-template-columns: 1fr 72px; } .preview-name { font-size: 1.1rem; } }
+.info-box { background: rgba(166,198,255,.12); border: 1px solid rgba(166,198,255,.24); border-radius: 20px; padding: 1.1rem 1.15rem; color:#fff; font-size:1rem; line-height:1.9; margin-bottom:1rem; }
+.section-card { background: linear-gradient(180deg, rgba(10,20,40,.97) 0%, rgba(8,16,32,.97) 100%); border:1px solid rgba(122,154,214,.22); border-radius:24px; padding:1rem 1rem .9rem 1rem; margin-bottom:1rem; box-shadow:0 8px 28px rgba(0,0,0,.16); }
+.section-title { color:#fff; font-size:1.45rem; font-weight:800; margin:0; }
+.small-note { color:#eef4ff; font-size:1rem; font-weight:600; }
+.metric-card { background: linear-gradient(180deg, rgba(12,22,42,.98) 0%, rgba(10,18,36,.98) 100%); border:1px solid rgba(130,160,220,.20); border-radius:22px; padding:1rem; margin-bottom:1rem; }
+.metric-label { color:#dbe7ff; font-size:1rem; margin-bottom:.25rem; }
+.metric-value { color:#fff; font-size:2.2rem; font-weight:800; line-height:1.1; }
+[data-testid="stMarkdownContainer"] p, [data-testid="stExpander"] summary, label[data-testid="stWidgetLabel"] { color:#f8fbff !important; font-weight:600 !important; }
+[data-testid="stFileUploader"] { background:#13233d !important; border:1px solid rgba(46,204,113,.40) !important; border-radius:18px !important; padding:.55rem !important; }
+[data-testid="stFileUploader"] section, [data-testid="stFileUploaderDropzone"] { background:#13233d !important; border:1px solid rgba(46,204,113,.32) !important; border-radius:16px !important; color:#fff !important; }
+[data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div, [data-testid="stFileUploader"] p { color:#fff !important; }
+[data-testid="stFileUploader"] button, [data-testid="stBaseButton-secondary"] { background:linear-gradient(90deg,#14b76b,#1ed37f) !important; color:#fff !important; font-weight:800 !important; border:none !important; border-radius:14px !important; }
+[data-testid="stFileUploader"] svg { fill:#fff !important; }
+[data-baseweb="select"] > div { background:#13233d !important; color:#fff !important; border:1px solid rgba(216,92,92,.45) !important; border-radius:16px !important; min-height:3rem !important; }
+[data-baseweb="select"] * { color:#fff !important; }
+.stButton > button, .stDownloadButton > button { border-radius:18px !important; font-weight:800 !important; padding:.82rem 1rem !important; border:none !important; box-shadow:none !important; font-size:1rem !important; }
+.green-btn button { background:linear-gradient(90deg,#14b76b,#1ed37f) !important; color:#fff !important; }
+.orange-btn button { background:linear-gradient(90deg,#cc8b16,#f0a21a) !important; color:#fff !important; }
+.red-btn button { background:linear-gradient(90deg,#b94e4e,#d85c5c) !important; color:#fff !important; }
+.dark-btn button { background:#1f3151 !important; color:#fff !important; border:1px solid rgba(255,255,255,.12) !important; }
+.stButton > button:disabled, .stDownloadButton > button:disabled { background:#6b7280 !important; color:#f8fbff !important; border:1px solid rgba(255,255,255,.18) !important; opacity:1 !important; }
+[data-testid="stAlert"] { border-radius:16px !important; }
+[data-testid="stAlert"] * { color:#fff !important; }
+.preview-panel { background:#091426; border:1px solid rgba(126,156,214,.18); border-radius:20px; padding:1rem; }
+.preview-title { font-size:2rem; font-weight:800; color:#fff; margin-bottom:.25rem; }
+.preview-sub { color:#cfdcff; font-size:1rem; margin-bottom:1rem; }
+.preview-row { display:grid; grid-template-columns:1fr 90px; gap:12px; align-items:center; padding:10px 12px; border-radius:16px; margin-bottom:8px; background:rgba(255,255,255,.03); }
+.preview-name { color:#fff; font-size:1.35rem; font-weight:800; line-height:1.2; }
+.preview-class { color:#cdd9f4; font-size:.95rem; margin-top:4px; }
+.rank-box { text-align:center; border-radius:14px; padding:8px 0; font-weight:800; font-size:1.35rem; color:#f7fbff; background:#1d2b46; border:1px solid rgba(120,160,220,.22); }
+.rank-S { background:#4c2fa8; } .rank-A { background:#1f8b58; } .rank-B { background:#2c6eb8; } .rank-C { background:#a97115; } .rank-D { background:#5a6578; }
+.cond-table { width:100%; border-collapse:collapse; }
+.cond-table th, .cond-table td { text-align:left; padding:12px 10px; border-bottom:1px solid rgba(255,255,255,.08); color:#f8fbff; vertical-align:top; }
+.cond-table th { color:#fff; font-size:1rem; font-weight:700; }
+.cond-cond { font-size:.92rem; color:#d7e5ff; line-height:1.45; word-break:break-word; }
+@media (max-width: 720px) { .preview-row { grid-template-columns:1fr 72px; } .preview-name { font-size:1.1rem; } }
 </style>
 """, unsafe_allow_html=True)
 
-REQUIRED_PRED_COLS = ["日付","開催","R","レース名","馬番","馬名","種牡馬","調教師","騎手","距離","馬場状態","前開催","前距離","間隔"]
+REQUIRED_PRED_COLS = ["日付","開催","R","レース名","馬番","馬名","種牡馬","調教師","騎手","距離","馬場状態"]
+HISTORY_REQUIRED = ["種牡馬","調教師","開催","距離"]
 
 def read_uploaded_csv(uploaded_file):
     if uploaded_file is None:
@@ -78,7 +74,7 @@ def read_uploaded_csv(uploaded_file):
     return pd.read_csv(uploaded_file)
 
 def normalize_text_series(series):
-    return series.astype(str).str.replace("\u3000", " ", regex=False).str.strip()
+    return series.astype(str).str.replace("\\u3000", " ", regex=False).str.strip()
 
 def normalize_columns(df):
     df = df.copy()
@@ -88,9 +84,8 @@ def normalize_columns(df):
         "surface":"芝ダ","distance":"距離","going":"馬場状態","popularity":"人気","finishPosition":"着順",
         "winOdds":"単勝","prevTrack":"前開催","prevDistance":"前距離","prevGoing":"前走馬場状態",
         "prevDate":"前走日付","intervalCategory":"間隔カテゴリ","distanceChange":"距離変化",
-        "trackChange":"開催変化","prevJockey":"前騎手","jockey":"騎手","distance_band":"距離帯",
-        "going_group":"馬場区分","track_change":"開催変化","interval_category":"間隔カテゴリ",
-        "distance_change":"距離変化","placed":"複勝フラグ","category":"分類","trust":"信頼度",
+        "trackChange":"開催変化","prevJockey":"前騎手","jockey":"騎手","placed":"複勝フラグ",
+        "category":"分類","trust":"信頼度",
     }
     df = df.rename(columns=rename_map)
     for c in ["馬名","レース名","開催","調教師","種牡馬","母父馬","騎手","前騎手"]:
@@ -145,73 +140,34 @@ def get_going_group(going):
         return "不明"
     return "良" if str(going).strip() == "良" else "道悪"
 
-def get_interval_category(value):
-    if pd.isna(value):
-        return "不明"
-    s = str(value).strip()
-    if not s: return "不明"
-    if "連闘" in s: return "連闘"
-    n = pd.to_numeric("".join(ch for ch in s if ch.isdigit() or ch in ".-"), errors="coerce")
-    if pd.notna(n):
-        if n <= 0: return "連闘"
-        if n <= 2: return "中1〜2週"
-        if n <= 5: return "中3〜5週"
-        if n <= 9: return "中6〜9週"
-        return "10週以上"
-    return "不明"
-
-def get_distance_change(curr, prev):
-    curr_num = pd.to_numeric("".join(ch for ch in str(curr) if ch.isdigit()), errors="coerce")
-    prev_num = pd.to_numeric("".join(ch for ch in str(prev) if ch.isdigit()), errors="coerce")
-    if pd.isna(curr_num) or pd.isna(prev_num): return "不明"
-    if curr_num > prev_num: return "延長"
-    if curr_num < prev_num: return "短縮"
-    return "同距離"
-
-def get_track_change(curr, prev):
-    if pd.isna(curr) or pd.isna(prev): return "不明"
-    return "同場" if str(curr).strip() == str(prev).strip() else "場替わり"
-
 def calc_place_flag(series):
     s = pd.to_numeric(series, errors="coerce")
     return np.where((s >= 1) & (s <= 3), 1, 0)
 
 def build_history_summary(history_df):
     df = history_df.copy()
-    if "距離帯" not in df.columns:
-        if "距離数値" not in df.columns:
-            df = add_surface_distance_columns(df)
-        df["距離帯"] = df["距離数値"].apply(get_distance_band)
-    if "馬場区分" not in df.columns:
-        df["馬場区分"] = df["馬場状態"].apply(get_going_group) if "馬場状態" in df.columns else "不明"
-    if "間隔カテゴリ" not in df.columns:
-        df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category) if "間隔" in df.columns else "不明"
-    if "距離変化" not in df.columns:
-        if "前距離" in df.columns and "距離" in df.columns:
-            df["距離変化"] = df.apply(lambda r: get_distance_change(r.get("距離"), r.get("前距離")), axis=1)
-        else:
-            df["距離変化"] = "不明"
-    if "開催変化" not in df.columns:
-        if "前開催" in df.columns and "開催" in df.columns:
-            df["開催変化"] = df.apply(lambda r: get_track_change(r.get("開催"), r.get("前開催")), axis=1)
-        else:
-            df["開催変化"] = "不明"
+    missing = [c for c in HISTORY_REQUIRED if c not in df.columns]
+    if missing:
+        raise ValueError("過去レースCSVの必須列不足: " + ", ".join(missing))
+    df = add_surface_distance_columns(df)
+    df["距離帯"] = df["距離数値"].apply(get_distance_band)
+    df["馬場区分"] = df["馬場状態"].apply(get_going_group) if "馬場状態" in df.columns else "不明"
     if "複勝フラグ" in df.columns:
         df["placed_flag"] = pd.to_numeric(df["複勝フラグ"], errors="coerce").fillna(0).astype(int)
     elif "着順" in df.columns:
         df["placed_flag"] = calc_place_flag(df["着順"])
     else:
         raise ValueError("過去レースCSVに 複勝フラグ または 着順 列が必要です。")
+
     def make_group(keys):
-        if any(k not in df.columns for k in keys):
-            return {}
         grouped = df.groupby(keys, dropna=False).agg(count=("placed_flag","size"), placed=("placed_flag","sum")).reset_index()
         out = {}
         for row in grouped.itertuples(index=False):
-            key = f"{row[0]}|||{row[1]}"
-            count = int(row[2]); placed = int(row[3])
+            key = "|||".join(str(x) for x in row[:-2])
+            count = int(row[-2]); placed = int(row[-1])
             out[key] = {"count": count, "placed": placed, "place_rate": placed / count if count else 0.0}
         return out
+
     return {
         "source_rows": int(len(df)),
         "sire_track": make_group(["種牡馬","開催"]),
@@ -219,9 +175,7 @@ def build_history_summary(history_df):
         "sire_going": make_group(["種牡馬","馬場区分"]),
         "trainer_track": make_group(["調教師","開催"]),
         "trainer_dist": make_group(["調教師","距離帯"]),
-        "trainer_interval": make_group(["調教師","間隔カテゴリ"]),
-        "trainer_distchg": make_group(["調教師","距離変化"]),
-        "trainer_trackchg": make_group(["調教師","開催変化"]),
+        "trainer_going": make_group(["調教師","馬場区分"]),
     }
 
 def history_backup_payload():
@@ -235,40 +189,38 @@ def restore_history_backup(uploaded_json):
     st.session_state.history_df = pd.DataFrame(payload.get("history_rows", []))
     st.session_state.summary_data = payload.get("summary_data", None)
 
-def lookup_score(summary_data, map_name, key, min_count=10):
+def lookup_score(summary_data, map_name, key, min_count=30):
     data = summary_data.get(map_name, {}).get(key)
-    if not data: return {"score": None, "count": None}
+    if not data:
+        return {"score": None, "count": None, "rate": None}
     count = data.get("count", 0)
-    if count < min_count: return {"score": None, "count": count}
-    return {"score": float(data.get("place_rate", 0)) * 100, "count": count}
+    rate = float(data.get("place_rate", 0)) * 100
+    if count < min_count or rate < 55:
+        return {"score": None, "count": count, "rate": rate}
+    return {"score": rate, "count": count, "rate": rate}
 
 def classify_rank(rank):
     return {"S":"本命候補","A":"相手本線","B":"強穴","C":"穴候補","D":"軽視候補"}.get(str(rank), "軽視候補")
 
 def score_to_rank_in_race(group_df):
-    g = group_df.sort_values("総合点", ascending=False).copy()
-    max_score = float(g["総合点"].max()) if len(g) else 0.0
-    min_score = float(g["総合点"].min()) if len(g) else 0.0
-    if max_score == min_score:
-        g["相対点"] = 60.0
-    else:
-        g["相対点"] = ((g["総合点"] - min_score) / (max_score - min_score) * 100).round(1)
+    g = group_df.sort_values(["強条件数","総合点","母数最小"], ascending=[False,False,False]).copy()
     g["信頼度"] = "D"
     if len(g) >= 1:
         g.iloc[0, g.columns.get_loc("信頼度")] = "S"
     if len(g) >= 2:
-        top1 = g.iloc[0]; top2 = g.iloc[1]
-        if len(g) >= 14 and top2["相対点"] >= 84 and (top1["相対点"] - top2["相対点"] <= 6):
+        t1 = g.iloc[0]; t2 = g.iloc[1]
+        if len(g) >= 14 and t2["強条件数"] >= 3 and (t1["総合点"] - t2["総合点"] <= 2.5):
             g.iloc[1, g.columns.get_loc("信頼度")] = "S"
     for idx in g.index:
         if g.loc[idx, "信頼度"] == "S":
             continue
-        rel = float(g.loc[idx, "相対点"])
-        if rel >= 72:
+        cnt = int(g.loc[idx, "強条件数"])
+        score = float(g.loc[idx, "総合点"])
+        if cnt >= 4 and score >= 60:
             g.loc[idx, "信頼度"] = "A"
-        elif rel >= 56:
+        elif cnt >= 3 and score >= 58:
             g.loc[idx, "信頼度"] = "B"
-        elif rel >= 40:
+        elif cnt >= 2 and score >= 56:
             g.loc[idx, "信頼度"] = "C"
         else:
             g.loc[idx, "信頼度"] = "D"
@@ -285,50 +237,40 @@ def prepare_prediction_df(df, summary_data):
             raise ValueError(f"必須列不足: {col}")
     df["距離帯"] = df["距離数値"].apply(get_distance_band)
     df["馬場区分"] = df["馬場状態"].apply(get_going_group)
-    df["間隔カテゴリ"] = df["間隔"].apply(get_interval_category)
-    df["距離変化"] = df.apply(lambda r: get_distance_change(r.get("距離"), r.get("前距離")), axis=1)
-    df["開催変化"] = df.apply(lambda r: get_track_change(r.get("開催"), r.get("前開催")), axis=1)
+
     rows = []
     for _, r in df.iterrows():
-        sire = r.get("種牡馬", "")
-        trainer = r.get("調教師", "")
-        track = r.get("開催", "")
-        dist_band = r.get("距離帯", "")
-        going = r.get("馬場区分", "")
-        interval = r.get("間隔カテゴリ", "")
-        distchg = r.get("距離変化", "")
-        trchg = r.get("開催変化", "")
-        s1 = lookup_score(summary_data, "sire_track", f"{sire}|||{track}")
-        s2 = lookup_score(summary_data, "sire_dist", f"{sire}|||{dist_band}")
-        s3 = lookup_score(summary_data, "sire_going", f"{sire}|||{going}")
-        t1 = lookup_score(summary_data, "trainer_track", f"{trainer}|||{track}")
-        t2 = lookup_score(summary_data, "trainer_dist", f"{trainer}|||{dist_band}")
-        t3 = lookup_score(summary_data, "trainer_interval", f"{trainer}|||{interval}")
-        t4 = lookup_score(summary_data, "trainer_distchg", f"{trainer}|||{distchg}")
-        t5 = lookup_score(summary_data, "trainer_trackchg", f"{trainer}|||{trchg}")
-        v_arr = [x["score"] for x in [s1,s2,s3] if x["score"] is not None]
-        h_arr = [x["score"] for x in [t1,t2,t3,t4,t5] if x["score"] is not None]
-        vertical = np.mean(v_arr) if v_arr else 0.0
-        horizontal = np.mean(h_arr) if h_arr else 0.0
-        total = vertical * 0.5 + horizontal * 0.5
-        counts = [x["count"] for x in [s1,s2,s3,t1,t2,t3,t4,t5] if x["count"] is not None]
-        min_count = int(min(counts)) if counts else ""
+        sire = r.get("種牡馬","")
+        trainer = r.get("調教師","")
+        track = r.get("開催","")
+        dist_band = r.get("距離帯","")
+        going = r.get("馬場区分","")
+        conds = [
+            ("種牡馬×競馬場", lookup_score(summary_data, "sire_track", f"{sire}|||{track}")),
+            ("種牡馬×距離帯", lookup_score(summary_data, "sire_dist", f"{sire}|||{dist_band}")),
+            ("種牡馬×馬場", lookup_score(summary_data, "sire_going", f"{sire}|||{going}")),
+            ("調教師×競馬場", lookup_score(summary_data, "trainer_track", f"{trainer}|||{track}")),
+            ("調教師×距離帯", lookup_score(summary_data, "trainer_dist", f"{trainer}|||{dist_band}")),
+            ("調教師×馬場", lookup_score(summary_data, "trainer_going", f"{trainer}|||{going}")),
+        ]
+        strong = [c for c in conds if c[1]["score"] is not None]
+        strong_scores = [c[1]["score"] for c in strong]
+        strong_counts = [c[1]["count"] for c in strong if c[1]["count"] is not None]
+        total = np.mean(strong_scores) if strong_scores else 0.0
+        min_count = int(min(strong_counts)) if strong_counts else 0
+        cond_names = " / ".join([f'{name}:{round(item["rate"],1)}%' for name, item in strong]) if strong else "強条件なし"
         row = r.to_dict()
-        row["縦軸点"] = round(vertical, 1)
-        row["横軸点"] = round(horizontal, 1)
         row["総合点"] = round(total, 1)
-        row["縦条件"] = f"{sire} × {track} × {dist_band} × {going}"
-        row["横条件"] = f"{trainer} × {interval} × {distchg} × {trchg}"
-        row["母数"] = min_count
+        row["強条件数"] = len(strong)
+        row["母数最小"] = min_count
+        row["採用条件"] = cond_names
         rows.append(row)
     out = pd.DataFrame(rows)
     group_cols = [c for c in ["日付","開催","R","レース名"] if c in out.columns]
-    pieces = []
-    for _, g in out.groupby(group_cols, dropna=False):
-        pieces.append(score_to_rank_in_race(g))
+    pieces = [score_to_rank_in_race(g) for _, g in out.groupby(group_cols, dropna=False)]
     out = pd.concat(pieces).sort_index()
     if group_cols:
-        out = out.sort_values(group_cols + ["総合点"], ascending=[True] * len(group_cols) + [False])
+        out = out.sort_values(group_cols + ["強条件数","総合点"], ascending=[True]*len(group_cols)+[False,False])
     return out
 
 def race_options_from_df(df):
@@ -337,11 +279,7 @@ def race_options_from_df(df):
         return []
     cols = [c for c in ["日付","開催","R","レース名"] if c in df.columns]
     temp = df[cols].drop_duplicates().fillna("")
-    items = []
-    for _, row in temp.iterrows():
-        label = f"{row.get('日付','')} {row.get('開催','')} {row.get('R','')} {row.get('レース名','')}"
-        items.append((label, row.to_dict()))
-    return items
+    return [(f"{row.get('日付','')} {row.get('開催','')} {row.get('R','')} {row.get('レース名','')}", row.to_dict()) for _, row in temp.iterrows()]
 
 def filter_race_df(df, race_dict):
     out = df.copy()
@@ -382,7 +320,7 @@ def build_race_svg_text(race_df, title):
         ])
         y += row_h
     lines.append("</svg>")
-    return "\n".join(lines)
+    return "\\n".join(lines)
 
 def unique_race_count(df):
     if df is None or df.empty:
@@ -393,7 +331,7 @@ def unique_race_count(df):
 def saved_condition_count(summary_data):
     if not summary_data:
         return 0
-    keys = ["sire_track","sire_dist","sire_going","trainer_track","trainer_dist","trainer_interval","trainer_distchg","trainer_trackchg"]
+    keys = ["sire_track","sire_dist","sire_going","trainer_track","trainer_dist","trainer_going"]
     return sum(len(summary_data.get(k, {})) for k in keys)
 
 def render_preview_html(race_df, title):
@@ -428,29 +366,27 @@ def render_condition_table(race_df):
             f'<td>{row.get("馬名","")}</td>'
             f'<td>{row.get("信頼度","")}</td>'
             f'<td>{row.get("分類","")}</td>'
-            f'<td class="cond-cond">{row.get("縦条件","")}</td>'
-            f'<td class="cond-cond">{row.get("横条件","")}</td>'
-            f'<td>{row.get("母数","")}</td>'
+            f'<td>{row.get("強条件数","")}</td>'
+            f'<td class="cond-cond">{row.get("採用条件","")}</td>'
+            f'<td>{row.get("母数最小","")}</td>'
             f'</tr>'
         )
     html = (
         '<table class="cond-table">'
-        '<thead><tr>'
-        '<th>馬名</th><th>信頼度</th><th>分類</th><th>縦条件</th><th>横条件</th><th>母数</th>'
-        '</tr></thead>'
+        '<thead><tr><th>馬名</th><th>信頼度</th><th>分類</th><th>強条件数</th><th>採用条件</th><th>母数最小</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody>'
         '</table>'
     )
     st.markdown(html, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">競馬 ランクアプリ<br>v6.9 Rebuild</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">画像保存は PNG ではなく SVG に変更しています。日本語文字化けを避けるためです。</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">競馬 ランクアプリ<br>v7.0 Narrow Model</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">本当に強い条件だけで狭く刺すモデルです。広く拾う条件は切っています。</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="info-box">
-判定条件は <b>血統適性 × 厩舎ローテ適性</b> です。<br><br>
-総合点は過去実測をベースに作り、ランクはレース内の相対点で再配分します。<br>
-Sは基本1頭、頭数が多く差が小さい時だけ2頭です。<br>
-前回より極端にDへ寄りすぎないように再調整しています。
+採用する主軸条件は <b>種牡馬×競馬場 / 種牡馬×距離帯 / 種牡馬×馬場 / 調教師×競馬場 / 調教師×距離帯 / 調教師×馬場</b> です。<br><br>
+採用基準は <b>母数30以上 かつ 複勝率55%以上</b>。<br>
+これを満たした条件だけ点数化し、レース内で S/A/B/C/D を再配分します。<br>
+S は原則1頭、条件が強く拮抗した時だけ最大2頭です。
 </div>
 """, unsafe_allow_html=True)
 
@@ -499,13 +435,7 @@ if backup_history:
     if payload is None:
         st.error("保存できる過去データがありません。")
     else:
-        st.download_button(
-            "履歴バックアップJSONをダウンロード",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            file_name="keiba_history_backup.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        st.download_button("履歴バックアップJSONをダウンロード", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), file_name="keiba_history_backup.json", mime="application/json", use_container_width=True)
 
 if clear_history:
     for k, v in DEFAULT_STATE.items():
@@ -564,8 +494,7 @@ if import_pred:
         st.error("予想CSVを選択してください。")
     else:
         try:
-            pred_file.seek(0)
-            pred_raw = pd.read_csv(pred_file)
+            pred_raw = read_uploaded_csv(pred_file)
             ranked = prepare_prediction_df(pred_raw, st.session_state.summary_data)
             st.session_state.ranked_prediction_df = ranked
             current_race_map = dict(race_options_from_df(ranked))
@@ -612,13 +541,7 @@ if save_image:
     if st.session_state.generated_svg_text is None:
         st.error("先に画像を作成してください。")
     else:
-        st.download_button(
-            "SVG画像をダウンロード",
-            data=st.session_state.generated_svg_text.encode("utf-8"),
-            file_name="keiba_rank_image.svg",
-            mime="image/svg+xml",
-            use_container_width=True
-        )
+        st.download_button("SVG画像をダウンロード", data=st.session_state.generated_svg_text.encode("utf-8"), file_name="keiba_rank_image.svg", mime="image/svg+xml", use_container_width=True)
 
 st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
 if st.session_state.preview_race_df is not None and not st.session_state.preview_race_df.empty:
