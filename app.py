@@ -1,12 +1,9 @@
 
-import io
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
+from pathlib import Path
 
-st.set_page_config(page_title="競馬 ランクアプリ v8.4 Simple Save", layout="wide")
+st.set_page_config(page_title="競馬 ランクアプリ v8.6 Ultra Compact", layout="wide")
 
 APP_DIR = Path(__file__).resolve().parent
 MASTER_PATH = APP_DIR / "master_logic.csv"
@@ -19,45 +16,46 @@ st.markdown("""
 <style>
 html, body, [data-testid="stAppViewContainer"] { background: linear-gradient(180deg, #071223 0%, #0a1730 100%); }
 [data-testid="stHeader"] { background: rgba(0,0,0,0); }
-.block-container { max-width: 1120px; padding-top: 1rem; padding-bottom: 3rem; }
-.main-title { font-size: 2.0rem; font-weight: 800; color: #ffffff; line-height: 1.25; margin-bottom: 0.35rem; }
-.sub-title { color: #dce9ff; font-size: 1rem; line-height: 1.8; margin-bottom: 1rem; }
-.info-box { background: rgba(166,198,255,.12); border: 1px solid rgba(166,198,255,.24); border-radius: 20px; padding: 1rem 1.1rem; color:#fff; font-size:1rem; line-height:1.9; margin-bottom:1rem; }
-.section-card { background: linear-gradient(180deg, rgba(10,20,40,.97) 0%, rgba(8,16,32,.97) 100%); border:1px solid rgba(122,154,214,.22); border-radius:24px; padding:1rem; margin-bottom:1rem; }
-.section-title { color:#fff; font-size:1.35rem; font-weight:800; margin:0; }
-.metric-card { background: linear-gradient(180deg, rgba(12,22,42,.98) 0%, rgba(10,18,36,.98) 100%); border:1px solid rgba(130,160,220,.20); border-radius:22px; padding:1rem; margin-bottom:1rem; }
-.metric-label { color:#dbe7ff; font-size:1rem; margin-bottom:.25rem; }
-.metric-value { color:#fff; font-size:2rem; font-weight:800; line-height:1.1; }
+.block-container { max-width: 860px; padding-top: 0.55rem; padding-bottom: 1rem; }
+.main-title { font-size: 1.45rem; font-weight: 800; color: #ffffff; line-height: 1.15; margin-bottom: 0.2rem; }
+.sub-title { color: #dce9ff; font-size: 0.82rem; line-height: 1.45; margin-bottom: 0.5rem; }
+.section-card { background: linear-gradient(180deg, rgba(10,20,40,.97) 0%, rgba(8,16,32,.97) 100%); border:1px solid rgba(122,154,214,.18); border-radius:16px; padding:.6rem .75rem; margin-bottom:.55rem; }
+.section-title { color:#fff; font-size:1rem; font-weight:800; margin:0; }
 [data-testid="stMarkdownContainer"] p, label[data-testid="stWidgetLabel"] { color:#f8fbff !important; font-weight:600 !important; }
-[data-testid="stFileUploader"] section, [data-testid="stFileUploaderDropzone"] { background:#13233d !important; border:1px solid rgba(46,204,113,.32) !important; border-radius:16px !important; color:#fff !important; }
+[data-testid="stFileUploader"] section, [data-testid="stFileUploaderDropzone"] { background:#13233d !important; border:1px solid rgba(46,204,113,.28) !important; border-radius:12px !important; color:#fff !important; }
 [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span, [data-testid="stFileUploader"] div, [data-testid="stFileUploader"] p { color:#fff !important; }
-[data-baseweb="select"] > div { background:#13233d !important; color:#fff !important; border:1px solid rgba(216,92,92,.45) !important; border-radius:16px !important; min-height:3rem !important; }
+[data-baseweb="select"] > div { background:#13233d !important; color:#fff !important; border:1px solid rgba(216,92,92,.40) !important; border-radius:12px !important; min-height:2.5rem !important; }
 [data-baseweb="select"] * { color:#fff !important; }
 .stButton > button, .stDownloadButton > button {
-    background:#1f3151 !important;
-    color:#ffffff !important;
-    border:1px solid rgba(255,255,255,.18) !important;
-    border-radius:14px !important;
-    padding:.75rem 1rem !important;
-    font-weight:700 !important;
+    background:#1f3151 !important; color:#ffffff !important; border:1px solid rgba(255,255,255,.16) !important;
+    border-radius:11px !important; padding:.56rem .65rem !important; font-weight:700 !important; font-size:.86rem !important;
 }
 .stButton > button:disabled, .stDownloadButton > button:disabled {
-    background:#233654 !important;
-    color:#dbe7ff !important;
-    opacity:1 !important;
+    background:#233654 !important; color:#dbe7ff !important; opacity:1 !important;
 }
-.preview-panel { background:#091426; border:1px solid rgba(126,156,214,.18); border-radius:20px; padding:1rem; }
-.preview-title { font-size:2rem; font-weight:800; color:#fff; margin-bottom:.25rem; }
-.preview-sub { color:#cfdcff; font-size:1rem; margin-bottom:1rem; }
-.preview-row { display:grid; grid-template-columns:1fr 90px; gap:12px; align-items:center; padding:10px 12px; border-radius:16px; margin-bottom:8px; background:rgba(255,255,255,.03); }
-.preview-name { color:#fff; font-size:1.35rem; font-weight:800; line-height:1.2; }
-.preview-class { color:#cdd9f4; font-size:.95rem; margin-top:4px; }
-.rank-box { text-align:center; border-radius:14px; padding:8px 0; font-weight:800; font-size:1.35rem; color:#f7fbff; background:#1d2b46; border:1px solid rgba(120,160,220,.22); }
+.ultra-wrap { background:#091426; border:1px solid rgba(126,156,214,.18); border-radius:18px; padding:10px 10px 8px 10px; }
+.ultra-title { font-size:1.25rem; font-weight:800; color:#fff; line-height:1.08; margin-bottom:2px; }
+.ultra-sub { color:#cfddff; font-size:.76rem; margin-bottom:7px; }
+.ultra-row { display:grid; grid-template-columns: 1fr 54px; gap:6px; align-items:center; min-height:26px; padding:3px 6px; border-radius:10px; margin-bottom:3px; background:rgba(255,255,255,.025); }
+.ultra-name { color:#fff; font-size:.82rem; font-weight:800; line-height:1.02; }
+.ultra-meta { color:#cfddff; font-size:.58rem; margin-top:1px; line-height:1.0; }
+.ultra-rank { text-align:center; border-radius:10px; padding:4px 0; font-weight:800; font-size:.82rem; color:#fff; }
 .rank-S { background:#4c2fa8; } .rank-A { background:#1f8b58; } .rank-B { background:#2c6eb8; } .rank-C { background:#a97115; } .rank-D { background:#5a6578; }
 .cond-table { width:100%; border-collapse:collapse; }
-.cond-table th, .cond-table td { text-align:left; padding:12px 10px; border-bottom:1px solid rgba(255,255,255,.08); color:#f8fbff; vertical-align:top; }
-.cond-table th { color:#fff; font-size:1rem; font-weight:700; }
-.cond-cond { font-size:.92rem; color:#d7e5ff; line-height:1.45; word-break:break-word; }
+.cond-table th, .cond-table td { text-align:left; padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.08); color:#f8fbff; vertical-align:top; font-size:.76rem; }
+.cond-table th { color:#fff; font-size:.8rem; font-weight:700; }
+.cond-cond { font-size:.68rem; color:#d7e5ff; line-height:1.25; word-break:break-word; }
+@media (max-width: 480px) {
+  .block-container { max-width: 420px; padding-top: .35rem; }
+  .main-title { font-size: 1.28rem; }
+  .sub-title { font-size: .74rem; margin-bottom:.35rem; }
+  .ultra-title { font-size:1.08rem; }
+  .ultra-sub { font-size:.68rem; }
+  .ultra-row { min-height:23px; padding:2px 5px; margin-bottom:2px; }
+  .ultra-name { font-size:.74rem; }
+  .ultra-meta { font-size:.52rem; }
+  .ultra-rank { font-size:.74rem; padding:3px 0; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -65,8 +63,6 @@ if "evaluated_df" not in st.session_state:
     st.session_state["evaluated_df"] = None
 if "preview_title" not in st.session_state:
     st.session_state["preview_title"] = "レースランキング"
-if "preview_png_bytes" not in st.session_state:
-    st.session_state["preview_png_bytes"] = None
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     rename_map = {
@@ -211,22 +207,22 @@ def filter_race(df: pd.DataFrame, race_dict):
         out = out[out[col].astype(str) == str(val)]
     return out.copy()
 
-def render_preview(race_df: pd.DataFrame, title: str):
+def render_ultra_preview(race_df: pd.DataFrame, title: str):
     subtitle = ""
     if not race_df.empty:
         first = race_df.iloc[0]
         subtitle = f'{first.get("raceName","")} / {first.get("distance","")} / {len(race_df)}頭'
-    html = [f'<div class="preview-panel"><div class="preview-title">{title}</div>']
+    html = [f'<div class="ultra-wrap"><div class="ultra-title">{title}</div>']
     if subtitle:
-        html.append(f'<div class="preview-sub">{subtitle}</div>')
+        html.append(f'<div class="ultra-sub">{subtitle}</div>')
     for _, row in race_df.iterrows():
-        rank = str(row.get("信頼度", "D"))
-        cat = row.get("分類", "")
-        name = row.get("horseName", "")
+        rank = str(row.get("信頼度","D"))
+        cat = row.get("分類","")
+        name = row.get("horseName","")
+        meta = f'{cat} / 一致{row.get("一致数",0)} / 加重{row.get("加重点",0)}'
         html.append(
-            f'<div class="preview-row"><div><div class="preview-name">{name}</div>'
-            f'<div class="preview-class">{cat} / 一致{row.get("一致数",0)}件 / 平均{row.get("平均点",0)} / 加重{row.get("加重点",0)}</div></div>'
-            f'<div class="rank-box rank-{rank}">{rank}</div></div>'
+            f'<div class="ultra-row"><div><div class="ultra-name">{name}</div><div class="ultra-meta">{meta}</div></div>'
+            f'<div class="ultra-rank rank-{rank}">{rank}</div></div>'
         )
     html.append("</div>")
     st.markdown("".join(html), unsafe_allow_html=True)
@@ -245,75 +241,8 @@ def render_condition_table(race_df: pd.DataFrame):
     html = '<table class="cond-table"><thead><tr><th>馬名</th><th>信頼度</th><th>分類</th><th>一致数</th><th>平均点</th><th>加重点</th><th>条件詳細</th></tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
     st.markdown(html, unsafe_allow_html=True)
 
-def _pick_font(size: int, bold: bool=False):
-    candidates = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" if bold else "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    for p in candidates:
-        if Path(p).exists():
-            try:
-                return ImageFont.truetype(p, size=size)
-            except Exception:
-                pass
-    return ImageFont.load_default()
-
-def build_race_png_bytes(race_df: pd.DataFrame, title: str) -> bytes:
-    width = 1400
-    row_h = 96
-    header_h = 180
-    height = header_h + len(race_df) * row_h + 50
-    bg = (8, 19, 36)
-    panel = (14, 28, 52)
-    white = (248, 251, 255)
-    subc = (207, 220, 255)
-    rank_colors = {"S":(76,47,168), "A":(31,139,88), "B":(44,110,184), "C":(169,113,21), "D":(90,101,120)}
-
-    img = Image.new("RGB", (width, height), bg)
-    draw = ImageDraw.Draw(img)
-    title_font = _pick_font(42, True)
-    sub_font = _pick_font(24, False)
-    name_font = _pick_font(30, True)
-    meta_font = _pick_font(20, False)
-    rank_font = _pick_font(34, True)
-
-    subtitle = ""
-    if not race_df.empty:
-        first = race_df.iloc[0]
-        subtitle = f'{first.get("raceName","")} / {first.get("distance","")} / {len(race_df)}頭'
-
-    draw.text((40, 34), str(title), fill=white, font=title_font)
-    draw.text((40, 92), subtitle, fill=subc, font=sub_font)
-
-    y = 135
-    for _, row in race_df.iterrows():
-        draw.rounded_rectangle((40, y, 1360, y+74), radius=20, fill=panel)
-        name = str(row.get("horseName",""))
-        meta = f'{row.get("分類","")} / 一致{row.get("一致数",0)}件 / 平均{row.get("平均点",0)} / 加重{row.get("加重点",0)}'
-        draw.text((64, y+12), name, fill=white, font=name_font)
-        draw.text((64, y+46), meta, fill=subc, font=meta_font)
-        rank = str(row.get("信頼度","D"))
-        rc = rank_colors.get(rank, (90,101,120))
-        draw.rounded_rectangle((1130, y+12, 1290, y+62), radius=18, fill=rc)
-        bbox = draw.textbbox((0,0), rank, font=rank_font)
-        tw = bbox[2]-bbox[0]
-        th = bbox[3]-bbox[1]
-        draw.text((1210 - tw/2, y+37 - th/2), rank, fill=white, font=rank_font)
-        y += row_h
-
-    bio = io.BytesIO()
-    img.save(bio, format="PNG")
-    return bio.getvalue()
-
-st.markdown('<div class="main-title">競馬 ランクアプリ<br>v8.4 Simple Save</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">PNG画像で保存できるシンプル版です。ボタン装飾は最小化しています。</div>', unsafe_allow_html=True)
-st.markdown("""
-<div class="info-box">
-内部では各条件ごとに <b>単勝率 / 複勝率 / 母数</b> を保持します。<br>
-重みは <b>血統1.2 / 調教師1.2 / 脚質1.0 / 前走場所0.8 / 馬場0.8 / 勝ち方1.0</b> です。<br>
-画像保存は <b>PNG形式</b> です。
-</div>
-""", unsafe_allow_html=True)
+st.markdown('<div class="main-title">競馬 ランクアプリ v8.6</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">超コンパクト版。評価後は下の一覧をそのままスクショしてください。</div>', unsafe_allow_html=True)
 
 if not MASTER_PATH.exists() or not SUMMARY_PATH.exists():
     st.error("master_logic.csv と master_summary.csv を app.py と同じ場所に置いてください。")
@@ -321,93 +250,66 @@ if not MASTER_PATH.exists() or not SUMMARY_PATH.exists():
 
 master, summary = load_master()
 
-st.markdown('<div class="section-card"><div class="section-title">集計マスタ状況</div></div>', unsafe_allow_html=True)
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">マスタ行数</div><div class="metric-value">{len(master):,}</div></div>', unsafe_allow_html=True)
-with m2:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">舞台数</div><div class="metric-value">{len(summary):,}</div></div>', unsafe_allow_html=True)
-with m3:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">条件種類</div><div class="metric-value">{master["条件"].nunique()}</div></div>', unsafe_allow_html=True)
+with st.expander("入力と操作", expanded=True):
+    pred_file = st.file_uploader("予想CSV", type=["csv"], label_visibility="visible")
 
-st.markdown('<div class="section-card"><div class="section-title">予想レースCSV</div></div>', unsafe_allow_html=True)
-pred_file = st.file_uploader("予想CSV", type=["csv"], label_visibility="collapsed")
-
-race_label = None
-if pred_file is not None:
-    try:
-        temp = pd.read_csv(pred_file)
-        temp = normalize_columns(temp)
-        opts = race_options(temp)
+    race_label = None
+    if pred_file is not None:
+        try:
+            temp = pd.read_csv(pred_file)
+            temp = normalize_columns(temp)
+            opts = race_options(temp)
+            labels = [x[0] for x in opts]
+            if labels:
+                race_label = st.selectbox("対象レース", labels)
+            pred_file.seek(0)
+        except Exception:
+            st.selectbox("対象レース", ["CSV確認中"], disabled=True)
+    elif st.session_state["evaluated_df"] is not None:
+        opts = race_options(st.session_state["evaluated_df"])
         labels = [x[0] for x in opts]
         if labels:
             race_label = st.selectbox("対象レース", labels)
-        pred_file.seek(0)
-    except Exception:
-        st.selectbox("対象レース", ["CSV確認中"], disabled=True)
-elif st.session_state["evaluated_df"] is not None:
-    opts = race_options(st.session_state["evaluated_df"])
-    labels = [x[0] for x in opts]
-    if labels:
-        race_label = st.selectbox("対象レース", labels)
-else:
-    st.selectbox("対象レース", ["先にCSVを読み込んでください"], disabled=True)
-
-b1, b2, b3, b4 = st.columns(4)
-with b1:
-    run_eval = st.button("予想CSVを評価", use_container_width=True)
-with b2:
-    make_image = st.button("画像を作成", use_container_width=True)
-with b3:
-    save_image = st.button("画像を保存", use_container_width=True)
-with b4:
-    save_eval = st.button("評価結果CSVを保存", use_container_width=True)
-
-if run_eval:
-    if pred_file is None:
-        st.error("予想CSVを選択してください。")
     else:
-        try:
-            pred = pd.read_csv(pred_file)
-            pred = normalize_columns(pred)
-            for col in PRED_REQUIRED:
-                if col not in pred.columns:
-                    raise ValueError(f"必須列不足: {col}")
-            evaluated = evaluate_prediction(pred, master)
-            st.session_state["evaluated_df"] = evaluated
-            st.session_state["preview_png_bytes"] = None
-            n_race = evaluated[["date","track","raceNo","raceName"]].drop_duplicates().shape[0]
-            st.success(f"評価完了: {len(evaluated):,}頭 / {n_race}レース")
-        except Exception as e:
-            st.error(f"評価中にエラーが出ました: {e}")
+        st.selectbox("対象レース", ["先にCSVを読み込んでください"], disabled=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        run_eval = st.button("予想CSVを評価", use_container_width=True)
+    with c2:
+        save_eval = st.button("評価結果CSVを保存", use_container_width=True)
+
+    if run_eval:
+        if pred_file is None:
+            st.error("予想CSVを選択してください。")
+        else:
+            try:
+                pred = pd.read_csv(pred_file)
+                pred = normalize_columns(pred)
+                for col in PRED_REQUIRED:
+                    if col not in pred.columns:
+                        raise ValueError(f"必須列不足: {col}")
+                evaluated = evaluate_prediction(pred, master)
+                st.session_state["evaluated_df"] = evaluated
+                n_race = evaluated[["date","track","raceNo","raceName"]].drop_duplicates().shape[0]
+                st.success(f"評価完了: {len(evaluated):,}頭 / {n_race}レース")
+            except Exception as e:
+                st.error(f"評価中にエラーが出ました: {e}")
 
 show_df = st.session_state["evaluated_df"]
 if show_df is not None:
     opts = race_options(show_df)
     race_map = dict(opts)
-    if race_label and race_label in race_map:
+    race_label_current = None
+    if 'race_label' in locals() and race_label and race_label in race_map:
+        race_label_current = race_label
         race_df = filter_race(show_df, race_map[race_label]).sort_values(["加重点","一致数","horseNo"], ascending=[False, False, True])
-        st.session_state["preview_title"] = race_label
     else:
         first_label, first_dict = opts[0]
+        race_label_current = first_label
         race_df = filter_race(show_df, first_dict).sort_values(["加重点","一致数","horseNo"], ascending=[False, False, True])
-        st.session_state["preview_title"] = first_label
 
-    if make_image:
-        st.session_state["preview_png_bytes"] = build_race_png_bytes(race_df, st.session_state["preview_title"])
-        st.success("PNG画像を作成しました。")
-
-    st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
-    render_preview(race_df, st.session_state["preview_title"])
-
-    if st.session_state["preview_png_bytes"] is not None:
-        st.download_button(
-            "PNG画像をダウンロード",
-            data=st.session_state["preview_png_bytes"],
-            file_name="keiba_rank_image.png",
-            mime="image/png",
-            use_container_width=True
-        )
+    render_ultra_preview(race_df, race_label_current)
 
     if save_eval:
         export_df = show_df.drop(columns=["detail_rows"]).copy()
@@ -419,7 +321,7 @@ if show_df is not None:
             use_container_width=True
         )
 
-    st.markdown('<div class="section-card"><div class="section-title">条件詳細</div></div>', unsafe_allow_html=True)
-    render_condition_table(race_df)
+    with st.expander("条件詳細を見る", expanded=False):
+        render_condition_table(race_df)
 else:
-    st.markdown('<div class="preview-panel"><div class="preview-sub">予想CSVを読み込んで評価してください。</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="ultra-wrap"><div class="ultra-sub">予想CSVを読み込んで評価してください。</div></div>', unsafe_allow_html=True)
