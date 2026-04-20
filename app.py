@@ -88,6 +88,7 @@ def normalize_columns(df):
         "category":"分類","trust":"信頼度",
     }
     df = df.rename(columns=rename_map)
+    df = df.loc[:, ~df.columns.duplicated()].copy()
     for c in ["馬名","レース名","開催","調教師","種牡馬","母父馬","騎手","前騎手"]:
         if c in df.columns:
             df[c] = normalize_text_series(df[c])
