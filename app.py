@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 
@@ -6,7 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬 ランクアプリ v7.2 Persist", layout="wide")
+st.set_page_config(page_title="競馬 ランクアプリ v7.3 Soft Match", layout="wide")
 
 APP_DIR = Path(__file__).resolve().parent
 STORE_PATH = APP_DIR / "saved_history_store.json"
@@ -76,10 +75,7 @@ HISTORY_REQUIRED = ["種牡馬","調教師","開催","距離"]
 def save_store_to_disk():
     if st.session_state.history_df is None or st.session_state.summary_data is None:
         return False, "保存できる過去データがありません。"
-    payload = {
-        "history_rows": st.session_state.history_df.to_dict(orient="records"),
-        "summary_data": st.session_state.summary_data,
-    }
+    payload = {"history_rows": st.session_state.history_df.to_dict(orient="records"), "summary_data": st.session_state.summary_data}
     STORE_PATH.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     return True, f"アプリ内に保存しました。件数: {len(st.session_state.history_df):,}"
 
@@ -122,16 +118,7 @@ def normalize_text_series(series):
 
 def normalize_columns(df):
     df = df.copy()
-    rename_map = {
-        "date":"日付","track":"開催","raceNo":"R","race_name":"レース名","raceName":"レース名",
-        "horseNo":"馬番","horse_no":"馬番",
-        "horseName":"馬名","horse_name":"馬名","trainer":"調教師","sire":"種牡馬","damSire":"母父馬",
-        "surface":"芝ダ","distance":"距離","going":"馬場状態","popularity":"人気","finishPosition":"着順",
-        "winOdds":"単勝","prevTrack":"前開催","prevDistance":"前距離","prevGoing":"前走馬場状態",
-        "prevDate":"前走日付","intervalCategory":"間隔カテゴリ","distanceChange":"距離変化",
-        "trackChange":"開催変化","prevJockey":"前騎手","jockey":"騎手","placed":"複勝フラグ",
-        "category":"分類","trust":"信頼度",
-    }
+    rename_map = {"date":"日付","track":"開催","raceNo":"R","race_name":"レース名","raceName":"レース名","horseNo":"馬番","horse_no":"馬番","horseName":"馬名","horse_name":"馬名","trainer":"調教師","sire":"種牡馬","damSire":"母父馬","surface":"芝ダ","distance":"距離","going":"馬場状態","popularity":"人気","finishPosition":"着順","winOdds":"単勝","prevTrack":"前開催","prevDistance":"前距離","prevGoing":"前走馬場状態","prevDate":"前走日付","intervalCategory":"間隔カテゴリ","distanceChange":"距離変化","trackChange":"開催変化","prevJockey":"前騎手","jockey":"騎手","placed":"複勝フラグ","category":"分類","trust":"信頼度"}
     df = df.rename(columns=rename_map)
     df = df.loc[:, ~df.columns.duplicated()].copy()
     for c in ["馬名","レース名","開催","調教師","種牡馬","母父馬","騎手","前騎手","馬番"]:
@@ -204,7 +191,6 @@ def build_history_summary(history_df):
         df["placed_flag"] = calc_place_flag(df["着順"])
     else:
         raise ValueError("過去レースCSVに 複勝フラグ または 着順 列が必要です。")
-
     def make_group(keys):
         grouped = df.groupby(keys, dropna=False).agg(count=("placed_flag","size"), placed=("placed_flag","sum")).reset_index()
         out = {}
@@ -213,16 +199,7 @@ def build_history_summary(history_df):
             count = int(row[-2]); placed = int(row[-1])
             out[key] = {"count": count, "placed": placed, "place_rate": placed / count if count else 0.0}
         return out
-
-    return {
-        "source_rows": int(len(df)),
-        "sire_track": make_group(["種牡馬","開催"]),
-        "sire_dist": make_group(["種牡馬","距離帯"]),
-        "sire_going": make_group(["種牡馬","馬場区分"]),
-        "trainer_track": make_group(["調教師","開催"]),
-        "trainer_dist": make_group(["調教師","距離帯"]),
-        "trainer_jockey": make_group(["調教師","騎手"]) if "騎手" in df.columns else {},
-    }
+    return {"source_rows": int(len(df)),"sire_track": make_group(["種牡馬","開催"]), "sire_dist": make_group(["種牡馬","距離帯"]), "sire_going": make_group(["種牡馬","馬場区分"]), "trainer_track": make_group(["調教師","開催"]), "trainer_dist": make_group(["調教師","距離帯"]), "trainer_jockey": make_group(["調教師","騎手"]) if "騎手" in df.columns else {}}
 
 def history_backup_payload():
     if st.session_state.history_df is None or st.session_state.summary_data is None:
@@ -235,17 +212,28 @@ def restore_history_backup(uploaded_json):
     st.session_state.history_df = pd.DataFrame(payload.get("history_rows", []))
     st.session_state.summary_data = payload.get("summary_data", None)
 
-def lookup_score(summary_data, map_name, key, min_count=20, min_rate=50):
+def lookup_score(summary_data, map_name, key, min_count=12, min_rate=45):
     data = summary_data.get(map_name, {}).get(key)
     if not data:
         return {"score": None, "count": None, "rate": None}
     count = data.get("count", 0)
     rate = float(data.get("place_rate", 0)) * 100
-    if count < min_count or rate < min_rate:
-        return {"score": None, "count": count, "rate": rate}
-    return {"score": rate, "count": count, "rate": rate}
+    if count >= min_count and rate >= min_rate:
+        return {"score": rate, "count": count, "rate": rate}
+    return {"score": None, "count": count, "rate": rate}
 
-def lookup_adjust(summary_data, map_name, key, min_count=15, min_rate=50):
+def lookup_soft_best(options):
+    valid = [o for o in options if o[1].get("count") not in [None, 0]]
+    if not valid:
+        return None, None
+    ranked = sorted(valid, key=lambda x: (x[1]["rate"] or 0, x[1]["count"] or 0), reverse=True)
+    name, item = ranked[0]
+    if item["rate"] is None:
+        return None, None
+    score = max(min(float(item["rate"]) - 5.0, 54.0), 38.0)
+    return name, {"score": score, "count": item["count"], "rate": item["rate"]}
+
+def lookup_adjust(summary_data, map_name, key, min_count=8, min_rate=45):
     data = summary_data.get(map_name, {}).get(key)
     if not data:
         return {"adj": 0.0, "count": None, "rate": None}
@@ -253,46 +241,45 @@ def lookup_adjust(summary_data, map_name, key, min_count=15, min_rate=50):
     rate = float(data.get("place_rate", 0)) * 100
     if count < min_count or rate < min_rate:
         return {"adj": 0.0, "count": count, "rate": rate}
-    if rate >= 62:
-        adj = 3.0
-    elif rate >= 56:
-        adj = 2.0
+    if rate >= 58:
+        adj = 2.5
+    elif rate >= 52:
+        adj = 1.5
     else:
-        adj = 1.0
+        adj = 0.8
     return {"adj": adj, "count": count, "rate": rate}
 
 def classify_rank(rank):
     return {"S":"本命候補","A":"相手本線","B":"強穴","C":"穴候補","D":"軽視候補"}.get(str(rank), "軽視候補")
 
 def score_to_rank_in_race(group_df):
-    g = group_df.sort_values(["強条件数","補正点","総合点","母数最小"], ascending=[False,False,False,False]).copy()
+    g = group_df.sort_values(["強条件数","参考一致数","補正点","総合点","母数最小"], ascending=[False,False,False,False,False]).copy()
     g["信頼度"] = "D"
-
-    if len(g) >= 1 and int(g.iloc[0]["強条件数"]) >= 2:
-        g.iloc[0, g.columns.get_loc("信頼度")] = "S"
-    elif len(g) >= 1 and int(g.iloc[0]["強条件数"]) >= 1:
-        g.iloc[0, g.columns.get_loc("信頼度")] = "A"
-
+    if len(g) >= 1:
+        top = g.iloc[0]
+        if int(top["強条件数"]) >= 2:
+            g.iloc[0, g.columns.get_loc("信頼度")] = "S"
+        elif int(top["強条件数"]) >= 1 or int(top["参考一致数"]) >= 3:
+            g.iloc[0, g.columns.get_loc("信頼度")] = "A"
+        else:
+            g.iloc[0, g.columns.get_loc("信頼度")] = "B"
     if len(g) >= 2:
         t1 = g.iloc[0]; t2 = g.iloc[1]
-        if int(t2["強条件数"]) >= 2 and ((t1["総合点"] + t1["補正点"]) - (t2["総合点"] + t2["補正点"]) <= 2.5):
-            if g.iloc[0]["信頼度"] == "S":
-                g.iloc[1, g.columns.get_loc("信頼度")] = "S"
-            elif g.iloc[0]["信頼度"] == "A":
-                g.iloc[1, g.columns.get_loc("信頼度")] = "A"
-
+        gap = (t1["総合点"] + t1["補正点"]) - (t2["総合点"] + t2["補正点"])
+        if g.iloc[0]["信頼度"] == "S" and (int(t2["強条件数"]) >= 2 or int(t2["参考一致数"]) >= 3) and gap <= 2.0:
+            g.iloc[1, g.columns.get_loc("信頼度")] = "A"
     for idx in g.index:
         if g.loc[idx, "信頼度"] in ["S", "A"]:
             continue
         cnt = int(g.loc[idx, "強条件数"])
+        soft = int(g.loc[idx, "参考一致数"])
         score = float(g.loc[idx, "総合点"] + g.loc[idx, "補正点"])
-        if cnt >= 2 and score >= 55:
+        if cnt >= 1 and score >= 50:
             g.loc[idx, "信頼度"] = "B"
-        elif cnt >= 1 and score >= 52:
+        elif soft >= 2 or score >= 45:
             g.loc[idx, "信頼度"] = "C"
         else:
             g.loc[idx, "信頼度"] = "D"
-
     g["ランク"] = g["信頼度"]
     g["分類"] = g["信頼度"].apply(classify_rank)
     return g
@@ -301,64 +288,52 @@ def prepare_prediction_df(df, summary_data):
     df = normalize_columns(df)
     df = ensure_race_key_columns(df)
     df = add_surface_distance_columns(df)
-
     for col in REQUIRED_PRED_COLS:
         if col not in df.columns:
             raise ValueError(f"必須列不足: {col}")
-
     df["距離帯"] = df["距離数値"].apply(get_distance_band)
     df["馬場区分"] = df["馬場状態"].apply(get_going_group)
-
     rows = []
     for _, r in df.iterrows():
-        sire = r.get("種牡馬","")
-        trainer = r.get("調教師","")
-        jockey = r.get("騎手","")
-        track = r.get("開催","")
-        dist_band = r.get("距離帯","")
-        going = r.get("馬場区分","")
-
-        base_conds = [
-            ("種牡馬×競馬場", lookup_score(summary_data, "sire_track", f"{sire}|||{track}")),
-            ("種牡馬×距離帯", lookup_score(summary_data, "sire_dist", f"{sire}|||{dist_band}")),
-            ("調教師×競馬場", lookup_score(summary_data, "trainer_track", f"{trainer}|||{track}")),
-            ("調教師×距離帯", lookup_score(summary_data, "trainer_dist", f"{trainer}|||{dist_band}")),
-        ]
-        strong = [c for c in base_conds if c[1]["score"] is not None]
+        sire = r.get("種牡馬",""); trainer = r.get("調教師",""); jockey = r.get("騎手",""); track = r.get("開催",""); dist_band = r.get("距離帯",""); going = r.get("馬場区分","")
+        raw_base = [("種牡馬×競馬場", lookup_score(summary_data, "sire_track", f"{sire}|||{track}")),("種牡馬×距離帯", lookup_score(summary_data, "sire_dist", f"{sire}|||{dist_band}")),("調教師×競馬場", lookup_score(summary_data, "trainer_track", f"{trainer}|||{track}")),("調教師×距離帯", lookup_score(summary_data, "trainer_dist", f"{trainer}|||{dist_band}"))]
+        strong = [c for c in raw_base if c[1]["score"] is not None]
         strong_scores = [c[1]["score"] for c in strong]
         strong_counts = [c[1]["count"] for c in strong if c[1]["count"] is not None]
-        total = np.mean(strong_scores) if strong_scores else 0.0
-        min_count = int(min(strong_counts)) if strong_counts else 0
-
+        soft_list = []
+        if not strong:
+            name, item = lookup_soft_best(raw_base)
+            if item is not None:
+                soft_list.append((f"{name}(参考)", item))
+        else:
+            for name, item in raw_base:
+                if item["score"] is None and item["rate"] is not None and item["count"] not in [None, 0] and item["rate"] >= 40 and item["count"] >= 8:
+                    soft_score = max(min(float(item["rate"]) - 5.0, 54.0), 38.0)
+                    soft_list.append((f"{name}(参考)", {"score": soft_score, "count": item["count"], "rate": item["rate"]}))
+        soft_scores = [c[1]["score"] for c in soft_list]
+        soft_counts = [c[1]["count"] for c in soft_list if c[1]["count"] is not None]
+        all_scores = strong_scores + soft_scores[:2]
+        total = np.mean(all_scores) if all_scores else 0.0
+        all_counts = strong_counts + soft_counts[:2]
+        min_count = int(min(all_counts)) if all_counts else 0
         adj1 = lookup_adjust(summary_data, "sire_going", f"{sire}|||{going}")
         adj2 = lookup_adjust(summary_data, "trainer_jockey", f"{trainer}|||{jockey}")
-
         adj_total = adj1["adj"] + adj2["adj"]
+        cond_tags = [f'{name}:{round(item["rate"],1)}%' for name, item in strong] + [f'{name}:{round(item["rate"],1)}%(参考)' for name, item in soft_list[:2]]
+        cond_names = " / ".join(cond_tags) if cond_tags else "一致なし"
         adj_tags = []
-        if adj1["adj"] > 0:
-            adj_tags.append(f'種牡馬×馬場:+{adj1["adj"]} ({round(adj1["rate"],1)}%)')
-        if adj2["adj"] > 0:
-            adj_tags.append(f'調教師×騎手:+{adj2["adj"]} ({round(adj2["rate"],1)}%)')
-        if not adj_tags:
-            adj_tags.append("補正なし")
-
-        cond_names = " / ".join([f'{name}:{round(item["rate"],1)}%' for name, item in strong]) if strong else "強条件なし"
-
+        if adj1["adj"] > 0: adj_tags.append(f'種牡馬×馬場:+{adj1["adj"]} ({round(adj1["rate"],1)}%)')
+        if adj2["adj"] > 0: adj_tags.append(f'調教師×騎手:+{adj2["adj"]} ({round(adj2["rate"],1)}%)')
+        if not adj_tags: adj_tags.append("補正なし")
         row = r.to_dict()
-        row["総合点"] = round(total, 1)
-        row["強条件数"] = len(strong)
-        row["母数最小"] = min_count
-        row["採用条件"] = cond_names
-        row["補正点"] = round(adj_total, 1)
-        row["補正内容"] = " / ".join(adj_tags)
+        row["総合点"] = round(total, 1); row["強条件数"] = len(strong); row["参考一致数"] = len(soft_list[:2]); row["母数最小"] = min_count; row["採用条件"] = cond_names; row["補正点"] = round(adj_total, 1); row["補正内容"] = " / ".join(adj_tags)
         rows.append(row)
-
     out = pd.DataFrame(rows)
     group_cols = [c for c in ["日付","開催","R","レース名"] if c in out.columns]
     pieces = [score_to_rank_in_race(g) for _, g in out.groupby(group_cols, dropna=False)]
     out = pd.concat(pieces).sort_index()
     if group_cols:
-        out = out.sort_values(group_cols + ["強条件数","補正点","総合点"], ascending=[True]*len(group_cols)+[False,False,False])
+        out = out.sort_values(group_cols + ["強条件数","参考一致数","補正点","総合点"], ascending=[True]*len(group_cols)+[False,False,False,False])
     return out
 
 def race_options_from_df(df):
@@ -377,35 +352,18 @@ def filter_race_df(df, race_dict):
     return out.copy()
 
 def build_race_svg_text(race_df, title):
-    width = 1200
-    row_h = 78
-    height = 220 + len(race_df) * row_h
+    width = 1200; row_h = 78; height = 220 + len(race_df) * row_h
     subtitle = ""
     if not race_df.empty:
         first = race_df.iloc[0]
         subtitle = f"{first.get('レース名','')} / {first.get('距離','')} / {len(race_df)}頭"
     rank_colors = {"S":"#5B34D6","A":"#1F8B58","B":"#2C6EB8","C":"#B97E16","D":"#5A6578"}
-    def esc(x):
-        return str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        '<rect width="100%" height="100%" fill="#081324"/>',
-        f'<text x="40" y="68" fill="#FFFFFF" font-size="34" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(title)}</text>',
-        f'<text x="40" y="114" fill="#CFDCFF" font-size="22" font-weight="500" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(subtitle)}</text>',
-    ]
+    def esc(x): return str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    lines = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">','<rect width="100%" height="100%" fill="#081324"/>',f'<text x="40" y="68" fill="#FFFFFF" font-size="34" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(title)}</text>',f'<text x="40" y="114" fill="#CFDCFF" font-size="22" font-weight="500" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(subtitle)}</text>']
     y = 150
     for _, row in race_df.iterrows():
-        horse = esc(row.get("馬名",""))
-        category = esc(row.get("分類",""))
-        rank = str(row.get("信頼度","D"))
-        color = rank_colors.get(rank, "#5A6578")
-        lines.extend([
-            f'<rect x="40" y="{y}" rx="18" ry="18" width="1120" height="60" fill="rgba(255,255,255,0.03)" stroke="rgba(126,156,214,0.10)"/>',
-            f'<text x="68" y="{y+28}" fill="#FFFFFF" font-size="22" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{horse}</text>',
-            f'<text x="68" y="{y+50}" fill="#CDD9F4" font-size="16" font-weight="500" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{category}</text>',
-            f'<rect x="980" y="{y+9}" rx="14" ry="14" width="120" height="42" fill="{color}" />',
-            f'<text x="1040" y="{y+36}" text-anchor="middle" fill="#FFFFFF" font-size="22" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{rank}</text>',
-        ])
+        horse = esc(row.get("馬名","")); category = esc(row.get("分類","")); rank = str(row.get("信頼度","D")); color = rank_colors.get(rank, "#5A6578")
+        lines.extend([f'<rect x="40" y="{y}" rx="18" ry="18" width="1120" height="60" fill="rgba(255,255,255,0.03)" stroke="rgba(126,156,214,0.10)"/>',f'<text x="68" y="{y+28}" fill="#FFFFFF" font-size="22" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{horse}</text>',f'<text x="68" y="{y+50}" fill="#CDD9F4" font-size="16" font-weight="500" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{category}</text>',f'<rect x="980" y="{y+9}" rx="14" ry="14" width="120" height="42" fill="{color}" />',f'<text x="1040" y="{y+36}" text-anchor="middle" fill="#FFFFFF" font-size="22" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{rank}</text>'])
         y += row_h
     lines.append("</svg>")
     return "\n".join(lines)
@@ -428,63 +386,28 @@ def render_preview_html(race_df, title):
         first = race_df.iloc[0]
         subtitle = f"{first.get('レース名','')} / {first.get('距離','')} / {len(race_df)}頭"
     html = [f'<div class="preview-panel"><div class="preview-title">{title}</div>']
-    if subtitle:
-        html.append(f'<div class="preview-sub">{subtitle}</div>')
+    if subtitle: html.append(f'<div class="preview-sub">{subtitle}</div>')
     for _, row in race_df.iterrows():
-        rank = str(row.get("信頼度","D"))
-        category = row.get("分類","")
-        name = row.get("馬名","")
-        html.append(
-            f'<div class="preview-row">'
-            f'<div><div class="preview-name">{name}</div><div class="preview-class">{category}</div></div>'
-            f'<div class="rank-box rank-{rank}">{rank}</div>'
-            f'</div>'
-        )
+        rank = str(row.get("信頼度","D")); category = row.get("分類",""); name = row.get("馬名","")
+        html.append(f'<div class="preview-row"><div><div class="preview-name">{name}</div><div class="preview-class">{category}</div></div><div class="rank-box rank-{rank}">{rank}</div></div>')
     html.append("</div>")
     st.markdown("".join(html), unsafe_allow_html=True)
 
 def render_condition_table(race_df):
     if race_df.empty:
-        st.info("予想CSVを読み込むと表示されます。")
-        return
+        st.info("予想CSVを読み込むと表示されます。"); return
     rows = []
     for _, row in race_df.iterrows():
-        rows.append(
-            f'<tr>'
-            f'<td>{row.get("馬名","")}</td>'
-            f'<td>{row.get("信頼度","")}</td>'
-            f'<td>{row.get("分類","")}</td>'
-            f'<td>{row.get("強条件数","")}</td>'
-            f'<td class="cond-cond">{row.get("採用条件","")}</td>'
-            f'<td class="cond-cond">{row.get("補正内容","")}</td>'
-            f'</tr>'
-        )
-    html = (
-        '<table class="cond-table">'
-        '<thead><tr><th>馬名</th><th>信頼度</th><th>分類</th><th>強条件数</th><th>採用条件</th><th>補正内容</th></tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody>'
-        '</table>'
-    )
+        rows.append(f'<tr><td>{row.get("馬名","")}</td><td>{row.get("信頼度","")}</td><td>{row.get("分類","")}</td><td>{row.get("強条件数","")}</td><td>{row.get("参考一致数","")}</td><td class="cond-cond">{row.get("採用条件","")}</td><td class="cond-cond">{row.get("補正内容","")}</td></tr>')
+    html = '<table class="cond-table"><thead><tr><th>馬名</th><th>信頼度</th><th>分類</th><th>強</th><th>参考</th><th>採用条件</th><th>補正内容</th></tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
     st.markdown(html, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">競馬 ランクアプリ<br>v7.2 Persist + Adjust</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">メイン4条件に補正2条件を足し、保存機能も付けた版です。</div>', unsafe_allow_html=True)
-st.markdown("""
-<div class="info-box">
-<b>メイン4条件</b><br>
-種牡馬×競馬場 / 種牡馬×距離帯 / 調教師×競馬場 / 調教師×距離帯<br>
-→ 採用基準: <b>母数20以上・複勝率50%以上</b><br><br>
-<b>補正2条件</b><br>
-種牡馬×馬場 / 調教師×騎手<br>
-→ 採用基準: <b>母数15以上・複勝率50%以上</b><br><br>
-<b>保存機能</b><br>
-アプリ内保存・再読込に対応しています。<br>
-ただし Streamlit Cloud の再起動や再デプロイ時は消えることがあるため、履歴バックアップJSONの保存も推奨です。
-</div>
-""", unsafe_allow_html=True)
+st.markdown('<div class="main-title">競馬 ランクアプリ<br>v7.3 Soft Match</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">全頭に最低1つは噛み合いを持たせやすくした版です。</div>', unsafe_allow_html=True)
+st.markdown("""<div class="info-box"><b>メイン4条件</b><br>種牡馬×競馬場 / 種牡馬×距離帯 / 調教師×競馬場 / 調教師×距離帯<br>→ 採用基準: <b>母数12以上・複勝率45%以上</b><br><br><b>補正2条件</b><br>種牡馬×馬場 / 調教師×騎手<br>→ 採用基準: <b>母数8以上・複勝率45%以上</b><br><br><b>参考一致</b><br>強条件が薄い馬でも、4条件の中で一番マシな条件を参考一致として拾います。<br>これにより、全頭Dばかりになりにくい設計です。<br><br><b>保存機能</b><br>アプリ内保存・再読込に対応しています。</div>""", unsafe_allow_html=True)
 
 if STORE_PATH.exists():
-    st.markdown('<div class="small-note">保存データあり: アプリを閉じても再読込できます（ただしサーバー再起動時は消える場合あり）</div>', unsafe_allow_html=True)
+    st.markdown('<div class="small-note">保存データあり</div>', unsafe_allow_html=True)
 else:
     st.markdown('<div class="small-note">保存データなし</div>', unsafe_allow_html=True)
 
@@ -494,78 +417,47 @@ history_backup_file = st.file_uploader("履歴バックアップJSON復元", typ
 
 c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
-    st.markdown('<div class="green-btn">', unsafe_allow_html=True)
-    import_history = st.button("過去CSV取込", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="green-btn">', unsafe_allow_html=True); import_history = st.button("過去CSV取込", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 with c2:
-    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
-    save_history_local = st.button("アプリ内保存", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True); save_history_local = st.button("アプリ内保存", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 with c3:
-    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
-    load_history_local = st.button("保存データ読込", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True); load_history_local = st.button("保存読込", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 with c4:
-    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
-    backup_history = st.button("JSON保存", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True); backup_history = st.button("JSON保存", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 with c5:
-    st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-    clear_history = st.button("保存削除", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="red-btn">', unsafe_allow_html=True); clear_history = st.button("保存削除", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 
 if import_history:
     if history_file is None:
         st.error("過去レースCSVを選択してください。")
     else:
         try:
-            raw_history = read_uploaded_csv(history_file)
-            raw_history = normalize_columns(raw_history)
-            raw_history = ensure_race_key_columns(raw_history)
-            raw_history = add_surface_distance_columns(raw_history)
-            st.session_state.history_df = raw_history
-            st.session_state.summary_data = build_history_summary(raw_history)
-            ok, msg = save_store_to_disk()
-            st.success(f"過去データを取り込みました。件数: {len(raw_history):,}")
-            if ok:
-                st.info(msg)
+            raw_history = read_uploaded_csv(history_file); raw_history = normalize_columns(raw_history); raw_history = ensure_race_key_columns(raw_history); raw_history = add_surface_distance_columns(raw_history)
+            st.session_state.history_df = raw_history; st.session_state.summary_data = build_history_summary(raw_history)
+            ok, msg = save_store_to_disk(); st.success(f"過去データを取り込みました。件数: {len(raw_history):,}")
+            if ok: st.info(msg)
         except Exception as e:
             st.error(f"過去レースCSVの読み込みでエラーが出ました: {e}")
 
 if save_history_local:
-    ok, msg = save_store_to_disk()
-    (st.success if ok else st.error)(msg)
-
+    ok, msg = save_store_to_disk(); (st.success if ok else st.error)(msg)
 if load_history_local:
-    ok, msg = load_store_from_disk()
-    (st.success if ok else st.error)(msg)
-
+    ok, msg = load_store_from_disk(); (st.success if ok else st.error)(msg)
 if history_backup_file is not None:
     try:
-        restore_history_backup(history_backup_file)
-        ok, msg = save_store_to_disk()
-        st.success("履歴バックアップを復元しました。")
-        if ok:
-            st.info(msg)
+        restore_history_backup(history_backup_file); ok, msg = save_store_to_disk(); st.success("履歴バックアップを復元しました。")
+        if ok: st.info(msg)
     except Exception as e:
         st.error(f"履歴バックアップの復元でエラーが出ました: {e}")
-
 if backup_history:
     payload = history_backup_payload()
     if payload is None:
         st.error("保存できる過去データがありません。")
     else:
         st.download_button("履歴バックアップJSONをダウンロード", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), file_name="keiba_history_backup.json", mime="application/json", use_container_width=True)
-
 if clear_history:
-    st.session_state.history_df = None
-    st.session_state.summary_data = None
-    st.session_state.ranked_prediction_df = None
-    st.session_state.preview_race_df = None
-    st.session_state.preview_title = "レースランキング"
-    st.session_state.generated_svg_text = None
-    ok, msg = delete_store_from_disk()
-    st.success(msg if ok else msg)
+    st.session_state.history_df = None; st.session_state.summary_data = None; st.session_state.ranked_prediction_df = None; st.session_state.preview_race_df = None; st.session_state.preview_title = "レースランキング"; st.session_state.generated_svg_text = None
+    ok, msg = delete_store_from_disk(); st.success(msg)
 
 if st.session_state.history_df is not None:
     st.markdown(f'<div class="small-note">取り込み済み件数: {len(st.session_state.history_df):,}</div>', unsafe_allow_html=True)
@@ -575,23 +467,14 @@ else:
 st.markdown('<div class="section-card"><div class="section-title">予想レースCSV（画像化用）</div></div>', unsafe_allow_html=True)
 pred_file = st.file_uploader("予想レースCSV", type=["csv"], key="pred_uploader", label_visibility="collapsed")
 
-race_options = []
-race_labels = []
-selected_race_label = None
+race_options = []; race_labels = []; selected_race_label = None
 if pred_file is not None:
     try:
-        tmp_pred = read_uploaded_csv(pred_file)
-        tmp_pred = normalize_columns(tmp_pred)
-        tmp_pred = ensure_race_key_columns(tmp_pred)
-        race_options = race_options_from_df(tmp_pred)
-        race_labels = [x[0] for x in race_options]
-        pred_file.seek(0)
+        tmp_pred = read_uploaded_csv(pred_file); tmp_pred = normalize_columns(tmp_pred); tmp_pred = ensure_race_key_columns(tmp_pred); race_options = race_options_from_df(tmp_pred); race_labels = [x[0] for x in race_options]; pred_file.seek(0)
     except Exception:
-        race_options = []
-        race_labels = []
+        race_options = []; race_labels = []
 elif st.session_state.ranked_prediction_df is not None:
-    race_options = race_options_from_df(st.session_state.ranked_prediction_df)
-    race_labels = [x[0] for x in race_options]
+    race_options = race_options_from_df(st.session_state.ranked_prediction_df); race_labels = [x[0] for x in race_options]
 
 if race_labels:
     selected_race_label = st.selectbox("対象レース", race_labels)
@@ -600,17 +483,11 @@ else:
 
 c1, c2, c3 = st.columns(3)
 with c1:
-    st.markdown('<div class="green-btn">', unsafe_allow_html=True)
-    import_pred = st.button("予想CSVを読み込む", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="green-btn">', unsafe_allow_html=True); import_pred = st.button("予想CSVを読み込む", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 with c2:
-    st.markdown('<div class="orange-btn">', unsafe_allow_html=True)
-    make_image = st.button("画像を作成", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="orange-btn">', unsafe_allow_html=True); make_image = st.button("画像を作成", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 with c3:
-    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
-    save_image = st.button("画像を保存", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True); save_image = st.button("画像を保存", use_container_width=True); st.markdown('</div>', unsafe_allow_html=True)
 
 if import_pred:
     if st.session_state.summary_data is None:
@@ -619,38 +496,23 @@ if import_pred:
         st.error("予想CSVを選択してください。")
     else:
         try:
-            pred_raw = read_uploaded_csv(pred_file)
-            ranked = prepare_prediction_df(pred_raw, st.session_state.summary_data)
-            st.session_state.ranked_prediction_df = ranked
-            current_race_map = dict(race_options_from_df(ranked))
-            preview_df = ranked.copy()
-            preview_title = "レースランキング"
+            pred_raw = read_uploaded_csv(pred_file); ranked = prepare_prediction_df(pred_raw, st.session_state.summary_data); st.session_state.ranked_prediction_df = ranked
+            current_race_map = dict(race_options_from_df(ranked)); preview_df = ranked.copy(); preview_title = "レースランキング"
             if selected_race_label and selected_race_label in current_race_map:
-                preview_df = filter_race_df(ranked, current_race_map[selected_race_label])
-                preview_title = selected_race_label
+                preview_df = filter_race_df(ranked, current_race_map[selected_race_label]); preview_title = selected_race_label
             else:
                 race_list = race_options_from_df(ranked)
                 if race_list:
-                    first_label, first_dict = race_list[0]
-                    preview_df = filter_race_df(ranked, first_dict)
-                    preview_title = first_label
-            st.session_state.preview_race_df = preview_df
-            st.session_state.preview_title = preview_title
-            st.session_state.generated_svg_text = build_race_svg_text(preview_df, preview_title)
-            st.success(f"予想CSV読込完了: {len(ranked):,}頭 / {unique_race_count(ranked)}レース")
+                    first_label, first_dict = race_list[0]; preview_df = filter_race_df(ranked, first_dict); preview_title = first_label
+            st.session_state.preview_race_df = preview_df; st.session_state.preview_title = preview_title; st.session_state.generated_svg_text = build_race_svg_text(preview_df, preview_title); st.success(f"予想CSV読込完了: {len(ranked):,}頭 / {unique_race_count(ranked)}レース")
         except Exception as e:
             st.error(f"予想CSVの読み込みでエラーが出ました: {e}")
 
 if st.session_state.ranked_prediction_df is not None:
-    ranked_df = st.session_state.ranked_prediction_df.copy()
-    current_race_map = dict(race_options_from_df(ranked_df))
-    show_df = ranked_df.copy()
-    current_title = st.session_state.preview_title
+    ranked_df = st.session_state.ranked_prediction_df.copy(); current_race_map = dict(race_options_from_df(ranked_df)); show_df = ranked_df.copy(); current_title = st.session_state.preview_title
     if selected_race_label and selected_race_label in current_race_map:
-        show_df = filter_race_df(ranked_df, current_race_map[selected_race_label])
-        current_title = selected_race_label
-    st.session_state.preview_race_df = show_df.copy()
-    st.session_state.preview_title = current_title
+        show_df = filter_race_df(ranked_df, current_race_map[selected_race_label]); current_title = selected_race_label
+    st.session_state.preview_race_df = show_df.copy(); st.session_state.preview_title = current_title
     st.markdown(f'<div class="small-note">予想CSV読込完了: {len(ranked_df):,}頭 / {unique_race_count(ranked_df)}レース</div>', unsafe_allow_html=True)
 else:
     st.markdown('<div class="small-note">まだ読み込んでいません。</div>', unsafe_allow_html=True)
@@ -659,8 +521,7 @@ if make_image:
     if st.session_state.preview_race_df is None or st.session_state.preview_race_df.empty:
         st.error("先に予想CSVを読み込んでください。")
     else:
-        st.session_state.generated_svg_text = build_race_svg_text(st.session_state.preview_race_df, st.session_state.preview_title)
-        st.success("画像を作成しました。")
+        st.session_state.generated_svg_text = build_race_svg_text(st.session_state.preview_race_df, st.session_state.preview_title); st.success("画像を作成しました。")
 
 if save_image:
     if st.session_state.generated_svg_text is None:
