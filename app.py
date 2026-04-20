@@ -54,6 +54,14 @@ html, body, [data-testid="stAppViewContainer"] { background: linear-gradient(180
 """, unsafe_allow_html=True)
 
 PRED_REQUIRED = ["date","track","raceNo","raceName","horseNo","horseName","jockey","trainer","sire","distance","going"]
+CONDITION_WEIGHTS = {
+    "血統": 1.2,
+    "調教師": 1.2,
+    "脚質": 1.0,
+    "前走場所": 0.8,
+    "馬場": 0.8,
+    "勝ち方": 1.0,
+}
 
 def normalize_columns(df):
     rename_map = {
@@ -166,31 +174,37 @@ def evaluate_prediction(pred_df, master):
         }
 
         details = []
-        points = []
+        weighted_points = []
+        raw_points = []
         hit_count = 0
         for cond, content in cond_values.items():
+            weight = CONDITION_WEIGHTS.get(cond, 1.0)
             if not content:
-                details.append((cond, "", "", "", "", ""))
+                details.append((cond, "", "", "", "", "", weight, ""))
                 continue
             found = lookup_condition(master, track, surface, dist_num, cond, content)
             if found is None:
-                details.append((cond, content, "-", "-", "-", "-"))
+                details.append((cond, content, "-", "-", "-", "-", weight, ""))
                 continue
             hit_count += 1
-            points.append(rank_to_point(found["rank"]))
+            point = rank_to_point(found["rank"])
+            raw_points.append(point)
+            weighted_points.append(point * weight)
             details.append((
                 cond, content, found["rank"],
-                f'{found["win_rate"]:.1%}', f'{found["place_rate"]:.1%}', str(found["count"])
+                f'{found["win_rate"]:.1%}', f'{found["place_rate"]:.1%}', str(found["count"]), weight, round(point * weight, 2)
             ))
 
-        avg_point = round(sum(points) / len(points), 2) if points else 0.0
-        rank = final_rank(avg_point)
-        comment = f"一致{hit_count}件 / 平均{avg_point}"
+        avg_point = round(sum(raw_points) / len(raw_points), 2) if raw_points else 0.0
+        weighted_avg = round(sum(weighted_points) / sum(CONDITION_WEIGHTS[c] for c, v in cond_values.items() if v), 2) if weighted_points else 0.0
+        rank = final_rank(weighted_avg)
+        comment = f"一致{hit_count}件 / 平均{avg_point} / 加重{weighted_avg}"
         out = r.to_dict()
         out["surface"] = surface
         out["distance_num"] = dist_num
         out["一致数"] = hit_count
         out["平均点"] = avg_point
+        out["加重点"] = weighted_avg
         out["信頼度"] = rank
         out["分類"] = classify(rank)
         out["comment"] = comment
@@ -222,7 +236,7 @@ def render_preview(race_df, title):
         cat = row.get("分類","")
         name = row.get("horseName","")
         html.append(
-            f'<div class="preview-row"><div><div class="preview-name">{name}</div><div class="preview-class">{cat} / 一致{row.get("一致数",0)}件 / 平均{row.get("平均点",0)}</div></div><div class="rank-box rank-{rank}">{rank}</div></div>'
+            f'<div class="preview-row"><div><div class="preview-name">{name}</div><div class="preview-class">{cat} / 一致{row.get("一致数",0)}件 / 平均{row.get("平均点",0)} / 加重{row.get("加重点",0)}</div></div><div class="rank-box rank-{rank}">{rank}</div></div>'
         )
     html.append("</div>")
     st.markdown("".join(html), unsafe_allow_html=True)
@@ -231,21 +245,64 @@ def render_condition_table(race_df):
     rows = []
     for _, row in race_df.iterrows():
         detail_text = []
-        for cond, content, rank, winr, placer, count in row.get("detail_rows", []):
-            detail_text.append(f"{cond}:{content or '-'} / {rank} / 単{winr} / 複{placer} / 母数{count}")
+        for cond, content, rank, winr, placer, count, weight, score in row.get("detail_rows", []):
+            detail_text.append(f"{cond}:{content or '-'} / {rank} / 単{winr} / 複{placer} / 母数{count} / 重み{weight} / 加点{score}")
         rows.append(
-            f'<tr><td>{row.get("horseName","")}</td><td>{row.get("信頼度","")}</td><td>{row.get("分類","")}</td><td>{row.get("一致数","")}</td><td>{row.get("平均点","")}</td><td class="cond-cond">{"<br>".join(detail_text)}</td></tr>'
+            f'<tr><td>{row.get("horseName","")}</td><td>{row.get("信頼度","")}</td><td>{row.get("分類","")}</td><td>{row.get("一致数","")}</td><td>{row.get("平均点","")}</td><td>{row.get("加重点","")}</td><td class="cond-cond">{"<br>".join(detail_text)}</td></tr>'
         )
-    html = '<table class="cond-table"><thead><tr><th>馬名</th><th>信頼度</th><th>分類</th><th>一致数</th><th>平均点</th><th>条件詳細</th></tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
+    html = '<table class="cond-table"><thead><tr><th>馬名</th><th>信頼度</th><th>分類</th><th>一致数</th><th>平均点</th><th>加重点</th><th>条件詳細</th></tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
     st.markdown(html, unsafe_allow_html=True)
 
+
+
+def build_race_svg(race_df, title):
+    width = 1200
+    row_h = 86
+    header_h = 160
+    height = header_h + len(race_df) * row_h + 40
+    rank_colors = {"S":"#4c2fa8","A":"#1f8b58","B":"#2c6eb8","C":"#a97115","D":"#5a6578"}
+
+    def esc(x):
+        return str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+    subtitle = ""
+    if not race_df.empty:
+        first = race_df.iloc[0]
+        subtitle = f'{first.get("raceName","")} / {first.get("distance","")} / {len(race_df)}頭'
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#081324"/>',
+        f'<text x="40" y="62" fill="#FFFFFF" font-size="34" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(title)}</text>',
+        f'<text x="40" y="106" fill="#CFDCFF" font-size="22" font-weight="500" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(subtitle)}</text>',
+    ]
+
+    y = 130
+    for _, row in race_df.iterrows():
+        horse = esc(row.get("horseName",""))
+        cat = esc(row.get("分類",""))
+        rank = str(row.get("信頼度","D"))
+        rank_color = rank_colors.get(rank, "#5a6578")
+        sub = esc(f'一致{row.get("一致数",0)}件 / 平均{row.get("平均点",0)} / 加重{row.get("加重点",0)}')
+
+        lines.extend([
+            f'<rect x="40" y="{y}" rx="18" ry="18" width="1120" height="68" fill="rgba(255,255,255,0.03)" stroke="rgba(126,156,214,0.10)"/>',
+            f'<text x="66" y="{y+28}" fill="#FFFFFF" font-size="22" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{horse}</text>',
+            f'<text x="66" y="{y+54}" fill="#CDD9F4" font-size="16" font-weight="500" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{esc(cat)} / {sub}</text>',
+            f'<rect x="985" y="{y+10}" rx="14" ry="14" width="120" height="48" fill="{rank_color}" />',
+            f'<text x="1045" y="{y+41}" text-anchor="middle" fill="#FFFFFF" font-size="24" font-weight="800" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">{rank}</text>',
+        ])
+        y += row_h
+
+    lines.append("</svg>")
+    return "\n".join(lines)
 st.markdown('<div class="main-title">競馬 ランクアプリ<br>v8.0 Master Logic</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">競馬場×芝ダ×距離を土台に、血統・調教師・脚質・前走場所・馬場・勝ち方を同じ重みで評価します。</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="info-box">
 内部では各条件ごとに <b>単勝率 / 複勝率 / 母数</b> を保持します。<br>
 最終評価は、各条件のランクを <b>同じ重み</b> で平均して作ります。<br>
-使う条件は <b>血統 / 調教師 / 脚質 / 前走場所 / 馬場 / 勝ち方</b> の6本です。
+使う条件は <b>血統 / 調教師 / 脚質 / 前走場所 / 馬場 / 勝ち方</b> の6本です。<br>重みは <b>血統1.2 / 調教師1.2 / 脚質1.0 / 前走場所0.8 / 馬場0.8 / 勝ち方1.0</b> です。
 </div>
 """, unsafe_allow_html=True)
 
@@ -271,6 +328,8 @@ if "evaluated_df" not in st.session_state:
     st.session_state["evaluated_df"] = None
 if "preview_title" not in st.session_state:
     st.session_state["preview_title"] = "レースランキング"
+if "preview_svg" not in st.session_state:
+    st.session_state["preview_svg"] = None
 
 race_label = None
 if pred_file is not None:
@@ -292,12 +351,20 @@ elif st.session_state["evaluated_df"] is not None:
 else:
     st.selectbox("対象レース", ["先にCSVを読み込んでください"], disabled=True)
 
-c1, c2 = st.columns(2)
+c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown('<div class="green-btn">', unsafe_allow_html=True)
     run_eval = st.button("予想CSVを評価", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 with c2:
+    st.markdown('<div class="orange-btn">', unsafe_allow_html=True)
+    make_image = st.button("画像を作成", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+with c3:
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
+    save_image = st.button("画像を保存", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+with c4:
     st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
     save_eval = st.button("評価結果CSVを保存", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -314,6 +381,7 @@ if run_eval:
                     raise ValueError(f"必須列不足: {col}")
             evaluated = evaluate_prediction(pred, master)
             st.session_state["evaluated_df"] = evaluated
+            st.session_state["preview_svg"] = None
             st.success(f"評価完了: {len(evaluated):,}頭 / {evaluated[['date','track','raceNo','raceName']].drop_duplicates().shape[0]}レース")
         except Exception as e:
             st.error(f"評価中にエラーが出ました: {e}")
@@ -332,8 +400,27 @@ if show_df is not None:
             race_df = filter_race(show_df, first_dict).sort_values(["平均点","一致数","horseNo"], ascending=[False,False,True])
             st.session_state["preview_title"] = first_label
 
-    st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
+    
+    if make_image:
+        st.session_state["preview_svg"] = build_race_svg(race_df, st.session_state["preview_title"])
+        st.success("画像を作成しました。")
+
+    if save_image:
+        if st.session_state["preview_svg"] is None:
+            st.error("先に画像を作成してください。")
+        else:
+            st.download_button(
+                "SVG画像をダウンロード",
+                data=st.session_state["preview_svg"].encode("utf-8"),
+                file_name="keiba_rank_image.svg",
+                mime="image/svg+xml",
+                use_container_width=True
+            )
+
+st.markdown('<div class="section-card"><div class="section-title">画像プレビュー</div></div>', unsafe_allow_html=True)
     render_preview(race_df, st.session_state["preview_title"])
+    if st.session_state.get("preview_svg") is not None:
+        st.info("画像化データを作成済みです。必要なら『画像を保存』を押してください。")
 
     st.markdown('<div class="section-card"><div class="section-title">条件詳細</div></div>', unsafe_allow_html=True)
     render_condition_table(race_df)
