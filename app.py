@@ -8,8 +8,8 @@ import streamlit as st
 st.set_page_config(page_title="競馬 ランクアプリ v8.0 Master Logic", layout="wide")
 
 APP_DIR = Path(__file__).resolve().parent
-MASTER_PATH = APP_DIR / "集計マスタ_競馬場芝ダ距離_条件別.csv"
-SUMMARY_PATH = APP_DIR / "集計サマリ_競馬場芝ダ距離.csv"
+MASTER_PATH = APP_DIR / "master_logic.csv"
+SUMMARY_PATH = APP_DIR / "master_summary.csv"
 PRED_STORE_PATH = APP_DIR / "saved_prediction_log.json"
 
 st.markdown("""
@@ -250,7 +250,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not MASTER_PATH.exists() or not SUMMARY_PATH.exists():
-    st.error("集計マスタCSVがありません。 app.py と同じ場所に 集計マスタ_競馬場芝ダ距離_条件別.csv と 集計サマリ_競馬場芝ダ距離.csv を置いてください。")
+    st.error("集計マスタCSVがありません。 app.py と同じ場所に master_logic.csv と master_summary.csv を置いてください。")
     st.stop()
 
 master, summary = load_master()
