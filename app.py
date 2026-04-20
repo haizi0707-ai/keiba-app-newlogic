@@ -1,10 +1,15 @@
 
 import json
-import pandas as pd
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬 ランクアプリ v7.1 Narrow + Adjust", layout="wide")
+st.set_page_config(page_title="競馬 ランクアプリ v7.2 Persist", layout="wide")
+
+APP_DIR = Path(__file__).resolve().parent
+STORE_PATH = APP_DIR / "saved_history_store.json"
 
 DEFAULT_STATE = {
     "history_df": None,
@@ -13,6 +18,7 @@ DEFAULT_STATE = {
     "preview_race_df": None,
     "preview_title": "レースランキング",
     "generated_svg_text": None,
+    "_boot_loaded": False,
 }
 for k, v in DEFAULT_STATE.items():
     if k not in st.session_state:
@@ -67,6 +73,44 @@ html, body, [data-testid="stAppViewContainer"] { background: linear-gradient(180
 REQUIRED_PRED_COLS = ["日付","開催","R","レース名","馬番","馬名","種牡馬","調教師","騎手","距離","馬場状態"]
 HISTORY_REQUIRED = ["種牡馬","調教師","開催","距離"]
 
+def save_store_to_disk():
+    if st.session_state.history_df is None or st.session_state.summary_data is None:
+        return False, "保存できる過去データがありません。"
+    payload = {
+        "history_rows": st.session_state.history_df.to_dict(orient="records"),
+        "summary_data": st.session_state.summary_data,
+    }
+    STORE_PATH.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return True, f"アプリ内に保存しました。件数: {len(st.session_state.history_df):,}"
+
+def load_store_from_disk():
+    if not STORE_PATH.exists():
+        return False, "保存データがありません。"
+    payload = json.loads(STORE_PATH.read_text(encoding="utf-8"))
+    st.session_state.history_df = pd.DataFrame(payload.get("history_rows", []))
+    st.session_state.summary_data = payload.get("summary_data", None)
+    return True, f"保存データを読み込みました。件数: {len(st.session_state.history_df):,}"
+
+def delete_store_from_disk():
+    if STORE_PATH.exists():
+        STORE_PATH.unlink()
+        return True, "保存データを削除しました。"
+    return False, "保存データはありません。"
+
+def boot_load_saved_data():
+    if st.session_state.get("_boot_loaded"):
+        return
+    st.session_state["_boot_loaded"] = True
+    if STORE_PATH.exists():
+        try:
+            payload = json.loads(STORE_PATH.read_text(encoding="utf-8"))
+            st.session_state.history_df = pd.DataFrame(payload.get("history_rows", []))
+            st.session_state.summary_data = payload.get("summary_data", None)
+        except Exception:
+            pass
+
+boot_load_saved_data()
+
 def read_uploaded_csv(uploaded_file):
     if uploaded_file is None:
         return None
@@ -80,6 +124,7 @@ def normalize_columns(df):
     df = df.copy()
     rename_map = {
         "date":"日付","track":"開催","raceNo":"R","race_name":"レース名","raceName":"レース名",
+        "horseNo":"馬番","horse_no":"馬番",
         "horseName":"馬名","horse_name":"馬名","trainer":"調教師","sire":"種牡馬","damSire":"母父馬",
         "surface":"芝ダ","distance":"距離","going":"馬場状態","popularity":"人気","finishPosition":"着順",
         "winOdds":"単勝","prevTrack":"前開催","prevDistance":"前距離","prevGoing":"前走馬場状態",
@@ -89,7 +134,7 @@ def normalize_columns(df):
     }
     df = df.rename(columns=rename_map)
     df = df.loc[:, ~df.columns.duplicated()].copy()
-    for c in ["馬名","レース名","開催","調教師","種牡馬","母父馬","騎手","前騎手"]:
+    for c in ["馬名","レース名","開催","調教師","種牡馬","母父馬","騎手","前騎手","馬番"]:
         if c in df.columns:
             df[c] = normalize_text_series(df[c])
     return df
@@ -190,7 +235,7 @@ def restore_history_backup(uploaded_json):
     st.session_state.history_df = pd.DataFrame(payload.get("history_rows", []))
     st.session_state.summary_data = payload.get("summary_data", None)
 
-def lookup_score(summary_data, map_name, key, min_count=30, min_rate=55):
+def lookup_score(summary_data, map_name, key, min_count=20, min_rate=50):
     data = summary_data.get(map_name, {}).get(key)
     if not data:
         return {"score": None, "count": None, "rate": None}
@@ -200,7 +245,7 @@ def lookup_score(summary_data, map_name, key, min_count=30, min_rate=55):
         return {"score": None, "count": count, "rate": rate}
     return {"score": rate, "count": count, "rate": rate}
 
-def lookup_adjust(summary_data, map_name, key, min_count=20, min_rate=52):
+def lookup_adjust(summary_data, map_name, key, min_count=15, min_rate=50):
     data = summary_data.get(map_name, {}).get(key)
     if not data:
         return {"adj": 0.0, "count": None, "rate": None}
@@ -208,10 +253,9 @@ def lookup_adjust(summary_data, map_name, key, min_count=20, min_rate=52):
     rate = float(data.get("place_rate", 0)) * 100
     if count < min_count or rate < min_rate:
         return {"adj": 0.0, "count": count, "rate": rate}
-    # 小さめの加点に抑える
     if rate >= 62:
         adj = 3.0
-    elif rate >= 58:
+    elif rate >= 56:
         adj = 2.0
     else:
         adj = 1.0
@@ -224,23 +268,27 @@ def score_to_rank_in_race(group_df):
     g = group_df.sort_values(["強条件数","補正点","総合点","母数最小"], ascending=[False,False,False,False]).copy()
     g["信頼度"] = "D"
 
-    if len(g) >= 1:
+    if len(g) >= 1 and int(g.iloc[0]["強条件数"]) >= 2:
         g.iloc[0, g.columns.get_loc("信頼度")] = "S"
+    elif len(g) >= 1 and int(g.iloc[0]["強条件数"]) >= 1:
+        g.iloc[0, g.columns.get_loc("信頼度")] = "A"
+
     if len(g) >= 2:
         t1 = g.iloc[0]; t2 = g.iloc[1]
-        if len(g) >= 14 and t2["強条件数"] >= 3 and ((t1["総合点"] + t1["補正点"]) - (t2["総合点"] + t2["補正点"]) <= 2.5):
-            g.iloc[1, g.columns.get_loc("信頼度")] = "S"
+        if int(t2["強条件数"]) >= 2 and ((t1["総合点"] + t1["補正点"]) - (t2["総合点"] + t2["補正点"]) <= 2.5):
+            if g.iloc[0]["信頼度"] == "S":
+                g.iloc[1, g.columns.get_loc("信頼度")] = "S"
+            elif g.iloc[0]["信頼度"] == "A":
+                g.iloc[1, g.columns.get_loc("信頼度")] = "A"
 
     for idx in g.index:
-        if g.loc[idx, "信頼度"] == "S":
+        if g.loc[idx, "信頼度"] in ["S", "A"]:
             continue
         cnt = int(g.loc[idx, "強条件数"])
         score = float(g.loc[idx, "総合点"] + g.loc[idx, "補正点"])
-        if cnt >= 4 and score >= 61:
-            g.loc[idx, "信頼度"] = "A"
-        elif cnt >= 3 and score >= 58:
+        if cnt >= 2 and score >= 55:
             g.loc[idx, "信頼度"] = "B"
-        elif cnt >= 2 and score >= 55:
+        elif cnt >= 1 and score >= 52:
             g.loc[idx, "信頼度"] = "C"
         else:
             g.loc[idx, "信頼度"] = "D"
@@ -419,35 +467,51 @@ def render_condition_table(race_df):
     )
     st.markdown(html, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">競馬 ランクアプリ<br>v7.1 Narrow + Adjust</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">メイン4条件に、種牡馬×馬場 と 調教師×騎手 の補正だけを足した版です。</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">競馬 ランクアプリ<br>v7.2 Persist + Adjust</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">メイン4条件に補正2条件を足し、保存機能も付けた版です。</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="info-box">
 <b>メイン4条件</b><br>
-種牡馬×競馬場 / 種牡馬×距離帯 / 調教師×競馬場 / 調教師×距離帯<br><br>
+種牡馬×競馬場 / 種牡馬×距離帯 / 調教師×競馬場 / 調教師×距離帯<br>
+→ 採用基準: <b>母数20以上・複勝率50%以上</b><br><br>
 <b>補正2条件</b><br>
-種牡馬×馬場 / 調教師×騎手<br><br>
-メインは <b>母数30以上・複勝率55%以上</b>、補正は <b>母数20以上・複勝率52%以上</b> を採用します。<br>
-補正は小さく加点し、最後にランクへ反映します。
+種牡馬×馬場 / 調教師×騎手<br>
+→ 採用基準: <b>母数15以上・複勝率50%以上</b><br><br>
+<b>保存機能</b><br>
+アプリ内保存・再読込に対応しています。<br>
+ただし Streamlit Cloud の再起動や再デプロイ時は消えることがあるため、履歴バックアップJSONの保存も推奨です。
 </div>
 """, unsafe_allow_html=True)
+
+if STORE_PATH.exists():
+    st.markdown('<div class="small-note">保存データあり: アプリを閉じても再読込できます（ただしサーバー再起動時は消える場合あり）</div>', unsafe_allow_html=True)
+else:
+    st.markdown('<div class="small-note">保存データなし</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="section-card"><div class="section-title">過去レースCSV（収集用）</div></div>', unsafe_allow_html=True)
 history_file = st.file_uploader("過去レースCSV", type=["csv"], key="history_uploader", label_visibility="collapsed")
 history_backup_file = st.file_uploader("履歴バックアップJSON復元", type=["json"], key="history_backup_uploader", label_visibility="collapsed")
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
     st.markdown('<div class="green-btn">', unsafe_allow_html=True)
-    import_history = st.button("過去レースCSVを取り込む", use_container_width=True)
+    import_history = st.button("過去CSV取込", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 with c2:
     st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
-    backup_history = st.button("履歴バックアップ保存", use_container_width=True)
+    save_history_local = st.button("アプリ内保存", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 with c3:
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
+    load_history_local = st.button("保存データ読込", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+with c4:
+    st.markdown('<div class="dark-btn">', unsafe_allow_html=True)
+    backup_history = st.button("JSON保存", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+with c5:
     st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-    clear_history = st.button("過去データ削除", use_container_width=True)
+    clear_history = st.button("保存削除", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 if import_history:
@@ -461,14 +525,28 @@ if import_history:
             raw_history = add_surface_distance_columns(raw_history)
             st.session_state.history_df = raw_history
             st.session_state.summary_data = build_history_summary(raw_history)
+            ok, msg = save_store_to_disk()
             st.success(f"過去データを取り込みました。件数: {len(raw_history):,}")
+            if ok:
+                st.info(msg)
         except Exception as e:
             st.error(f"過去レースCSVの読み込みでエラーが出ました: {e}")
+
+if save_history_local:
+    ok, msg = save_store_to_disk()
+    (st.success if ok else st.error)(msg)
+
+if load_history_local:
+    ok, msg = load_store_from_disk()
+    (st.success if ok else st.error)(msg)
 
 if history_backup_file is not None:
     try:
         restore_history_backup(history_backup_file)
+        ok, msg = save_store_to_disk()
         st.success("履歴バックアップを復元しました。")
+        if ok:
+            st.info(msg)
     except Exception as e:
         st.error(f"履歴バックアップの復元でエラーが出ました: {e}")
 
@@ -480,9 +558,14 @@ if backup_history:
         st.download_button("履歴バックアップJSONをダウンロード", data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), file_name="keiba_history_backup.json", mime="application/json", use_container_width=True)
 
 if clear_history:
-    for k, v in DEFAULT_STATE.items():
-        st.session_state[k] = v
-    st.success("過去データを削除しました。")
+    st.session_state.history_df = None
+    st.session_state.summary_data = None
+    st.session_state.ranked_prediction_df = None
+    st.session_state.preview_race_df = None
+    st.session_state.preview_title = "レースランキング"
+    st.session_state.generated_svg_text = None
+    ok, msg = delete_store_from_disk()
+    st.success(msg if ok else msg)
 
 if st.session_state.history_df is not None:
     st.markdown(f'<div class="small-note">取り込み済み件数: {len(st.session_state.history_df):,}</div>', unsafe_allow_html=True)
@@ -531,7 +614,7 @@ with c3:
 
 if import_pred:
     if st.session_state.summary_data is None:
-        st.error("先に過去レースCSVを取り込んでください。")
+        st.error("先に過去レースCSVを取り込むか、保存データを読み込んでください。")
     elif pred_file is None:
         st.error("予想CSVを選択してください。")
     else:
