@@ -144,7 +144,6 @@ def prepare_race_df(df):
         if col not in df.columns:
             df[col] = ""
 
-    df["date"] = df["date"].apply(norm_text)
     df["場所"] = df["場所"].apply(norm_track)
     df["trainer"] = df["trainer"].apply(norm_text)
     df["sire"] = df["sire"].apply(norm_text)
@@ -183,7 +182,6 @@ def prepare_stat_table(df, kind):
         raise ValueError(f"{spec['label']}テーブルに必須列が不足: {', '.join(missing)}")
 
     df = df[required + [c for c in ["勝利数", "単勝率", "複勝率"] if c in df.columns]].copy()
-    df["date"] = df["date"].apply(norm_text)
     df["場所"] = df["場所"].apply(norm_track)
     df["芝ダ"] = df["芝ダ"].apply(norm_surface)
     df[spec["jp_col"]] = df[spec["jp_col"]].apply(norm_text)
