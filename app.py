@@ -229,16 +229,19 @@ def lookup_component(row, table_df, fallback_df, kind):
 def classify_rank(score):
     if pd.isna(score):
         return ""
-    # 4項目版の3年分検証に合わせたランク帯
-    # S: 複勝率 81%以上帯
-    # A: 複勝率 70%以上 81%未満帯
-    if score >= 40:
+    # 4項目版の3年分実績ベース再設計
+    # S: 43.00点以上   -> 複勝率 95.59%
+    # A: 33.00点以上   -> 複勝率 70.05%
+    # B: 28.50点以上   -> 複勝率 40.04%
+    # C: 22.25点以上   -> 複勝率 20.32%
+    # D: 22.25点未満   -> 複勝率  5.72%
+    if score >= 43.00:
         return "S"
-    if score >= 34:
+    if score >= 33.00:
         return "A"
-    if score >= 28:
+    if score >= 28.50:
         return "B"
-    if score >= 22:
+    if score >= 22.25:
         return "C"
     return "D"
 
@@ -262,7 +265,7 @@ def score_race_df(race_df, prepared_tables):
     out.loc[out["ランク"] == "S", "ランク"] = "A"
     if len(top_idx) > 0:
         top_mask = out.index.isin(top_idx)
-        out.loc[top_mask & (out["総合点"] >= 40), "ランク"] = "S"
+        out.loc[top_mask & (out["総合点"] >= 43.00), "ランク"] = "S"
 
     out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
     out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
@@ -334,7 +337,7 @@ with st.sidebar:
     damsire_file = st.file_uploader("母父馬CSV", type=["csv"], key="damsire")
 
 st.caption("現在の比重：脚質37.5 / 前走場所22.5 / 種牡馬15 / 母父馬25")
-st.caption("ランク目安：S=複勝率81%以上帯 / A=複勝率70%以上81%未満帯。Sは各レース1頭まで。")
+st.caption("ランク目安：S=95%級 / A=70%級 / B=40%級 / C=20%級 / D=それ未満。Sは各レース1頭まで。")
 
 if race_file is None:
     st.info("まず出走馬CSVをアップロードしてください。")
