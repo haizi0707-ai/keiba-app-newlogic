@@ -309,6 +309,7 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, field_size_v
     if str(race_val).strip():
         title_parts.append(str(race_val).strip())
     title = " ".join(title_parts).strip()
+
     subtitle_parts = []
     if str(race_name_val).strip():
         subtitle_parts.append(str(race_name_val).strip())
@@ -318,120 +319,40 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, field_size_v
         subtitle_parts.append(f"{field_size_val}頭")
     subtitle = " / ".join(subtitle_parts)
 
-    html = """
-    <style>
-      .kv-wrap{
-        background: linear-gradient(180deg,#071225 0%, #0b1730 100%);
-        border-radius: 22px;
-        padding: 18px 14px 18px 14px;
-        color: #f5f7fb;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.22);
-        margin: 10px 0 18px 0;
-      }
-      .kv-title{
-        font-size: 22px;
-        font-weight: 800;
-        line-height: 1.2;
-        margin: 0 0 6px 0;
-        letter-spacing: 0.2px;
-      }
-      .kv-subtitle{
-        font-size: 13px;
-        color: #c8d2e8;
-        margin: 0 0 14px 0;
-      }
-      .horse-card{
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap: 10px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.04);
-        border-radius: 16px;
-        padding: 11px 12px;
-        margin: 8px 0;
-      }
-      .horse-left{
-        min-width:0;
-        flex:1;
-      }
-      .horse-top{
-        display:flex;
-        align-items:center;
-        gap:8px;
-        min-width:0;
-      }
-      .horse-no{
-        font-size: 12px;
-        color: #9fb0d3;
-        font-weight: 700;
-        flex: 0 0 auto;
-      }
-      .horse-name{
-        font-size: 17px;
-        font-weight: 800;
-        color: #ffffff;
-        line-height:1.2;
-        word-break: break-all;
-      }
-      .rank-pill{
-        min-width: 56px;
-        text-align:center;
-        font-size: 22px;
-        font-weight: 900;
-        border-radius: 14px;
-        padding: 9px 18px;
-        flex: 0 0 auto;
-        border: 2px solid #334a76;
-        color: #edf3ff;
-        background: rgba(93,122,183,0.12);
-      }
-      .rank-S{
-        border-color:#e7c65b;
-        color:#fff2ba;
-        background: rgba(231,198,91,0.15);
-        box-shadow: inset 0 0 0 1px rgba(231,198,91,0.25);
-      }
-      .rank-A{
-        border-color:#c9d6ef;
-        color:#ffffff;
-        background: rgba(201,214,239,0.10);
-      }
-      .rank-B{
-        border-color:#d9b456;
-        color:#ffe6a3;
-        background: rgba(217,180,86,0.12);
-      }
-      .rank-C{
-        border-color:#3e547e;
-        color:#d7e3ff;
-        background: rgba(93,122,183,0.08);
-      }
-      .rank-D{
-        border-color:#30405f;
-        color:#b8c6e3;
-        background: rgba(70,89,127,0.06);
-      }
-    </style>
-    """
-    html += f'<div class="kv-wrap"><div class="kv-title">{title}</div><div class="kv-subtitle">{subtitle}</div>'
+    css = """
+<style>
+.kv-wrap{background:linear-gradient(180deg,#071225 0%,#0b1730 100%);border-radius:22px;padding:18px 14px;color:#f5f7fb;box-shadow:0 10px 30px rgba(0,0,0,.22);margin:10px 0 18px 0}
+.kv-title{font-size:22px;font-weight:800;line-height:1.2;margin:0 0 6px 0;letter-spacing:.2px}
+.kv-subtitle{font-size:13px;color:#c8d2e8;margin:0 0 14px 0}
+.horse-card{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.04);border-radius:16px;padding:11px 12px;margin:8px 0}
+.horse-left{min-width:0;flex:1}
+.horse-top{display:flex;align-items:center;gap:8px;min-width:0}
+.horse-no{font-size:12px;color:#9fb0d3;font-weight:700;flex:0 0 auto}
+.horse-name{font-size:17px;font-weight:800;color:#ffffff;line-height:1.2;word-break:break-all}
+.rank-pill{min-width:56px;text-align:center;font-size:22px;font-weight:900;border-radius:14px;padding:9px 18px;flex:0 0 auto;border:2px solid #334a76;color:#edf3ff;background:rgba(93,122,183,.12)}
+.rank-S{border-color:#e7c65b;color:#fff2ba;background:rgba(231,198,91,.15);box-shadow:inset 0 0 0 1px rgba(231,198,91,.25)}
+.rank-A{border-color:#c9d6ef;color:#ffffff;background:rgba(201,214,239,.10)}
+.rank-B{border-color:#d9b456;color:#ffe6a3;background:rgba(217,180,86,.12)}
+.rank-C{border-color:#3e547e;color:#d7e3ff;background:rgba(93,122,183,.08)}
+.rank-D{border-color:#30405f;color:#b8c6e3;background:rgba(70,89,127,.06)}
+</style>
+"""
+    html = css + f'<div class="kv-wrap"><div class="kv-title">{title}</div><div class="kv-subtitle">{subtitle}</div>'
     for _, row in card_df.iterrows():
-        horse_no = str(row.get("馬番","")).strip()
-        horse_name = str(row.get("馬名","")).strip()
-        rank = str(row.get("ランク","")).strip()
-        rank_cls = f"rank-{rank}" if rank in {"S","A","B","C","D"} else "rank-D"
-        html += f"""
-        <div class="horse-card">
-          <div class="horse-left">
-            <div class="horse-top">
-              <div class="horse-no">{horse_no}</div>
-              <div class="horse-name">{horse_name}</div>
-            </div>
-          </div>
-          <div class="rank-pill {rank_cls}">{rank}</div>
-        </div>
-        """
-    html += "</div>"
+        horse_no = str(row.get("馬番", "")).strip()
+        horse_name = str(row.get("馬名", "")).strip()
+        rank = str(row.get("ランク", "")).strip()
+        rank_cls = f"rank-{rank}" if rank in {"S", "A", "B", "C", "D"} else "rank-D"
+        html += (
+            f'<div class="horse-card">'
+            f'<div class="horse-left"><div class="horse-top">'
+            f'<div class="horse-no">{horse_no}</div>'
+            f'<div class="horse-name">{horse_name}</div>'
+            f'</div></div>'
+            f'<div class="rank-pill {rank_cls}">{rank}</div>'
+            f'</div>'
+        )
+    html += '</div>'
     return html
 
 
