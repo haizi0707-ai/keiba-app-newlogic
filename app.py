@@ -1,69 +1,21 @@
 import os
 import unicodedata
+from typing import Dict, List, Tuple
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v8.1 Master Scoring", layout="wide")
+st.set_page_config(page_title='競馬ロジック検証アプリ v1', layout='centered')
 
-BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
-DEFAULT_FILES = {
-    "bloodline": os.path.join(BASE_DIR, "bloodline_stats_7to12.csv"),
-    "trainer": os.path.join(BASE_DIR, "trainer_stats_7to12.csv"),
-    "style": os.path.join(BASE_DIR, "style_stats_7to12.csv"),
-    "prevtrack": os.path.join(BASE_DIR, "prevtrack_stats_7to12.csv"),
-    "winstyle": os.path.join(BASE_DIR, "winstyle_stats_7to12.csv"),
-}
-
-TABLE_SPECS = {
-    "bloodline": {"label": "血統", "key_col": "血統", "jp_col": "血統", "score_col": "血統点", "count_col": "血統母数"},
-    "trainer": {"label": "調教師", "key_col": "調教師", "jp_col": "調教師", "score_col": "調教師点", "count_col": "調教師母数"},
-    "style": {"label": "脚質", "key_col": "脚質", "jp_col": "脚質", "score_col": "脚質点", "count_col": "脚質母数"},
-    "prevtrack": {"label": "前走場所", "key_col": "前走場所", "jp_col": "前走場所", "score_col": "前走場所点", "count_col": "前走場所母数"},
-    "winstyle": {"label": "勝ち方", "key_col": "勝ち方", "jp_col": "勝ち方", "score_col": "勝ち方点", "count_col": "勝ち方母数"},
-}
-
-RACE_COLUMN_CANDIDATES = {
-    "場所": ["場所", "track", "競馬場", "開催", "場名"],
-    "raceNo": ["raceNo", "race_number", "raceNo.", "R", "レース番号", "race_no"],
-    "raceName": ["raceName", "race_name", "レース名", "レース"],
-    "horseNo": ["horseNo", "horse_number", "馬番"],
-    "horseName": ["horseName", "horse_name", "馬名"],
-    "jockey": ["jockey", "騎手"],
-    "trainer": ["trainer", "調教師"],
-    "sire": ["sire", "種牡馬", "血統"],
-    "distance": ["distance", "距離"],
-    "going": ["going", "馬場状態", "馬場"],
-    "style": ["style", "脚質"],
-    "prevTrack": ["prevTrack", "前走場所", "前開催", "前走競馬場"],
-    "winStyle": ["winStyle", "勝ち方", "前走勝ち方"],
-    "comment": ["comment", "短評", "備考"],
-}
-
-STYLE_MAP = {
-    "逃": "逃げ", "逃げ": "逃げ",
-    "先": "先行", "先行": "先行",
-    "差": "差し", "差し": "差し",
-    "追": "追込", "追込": "追込", "追い込み": "追込",
-}
-
-WINSTYLE_MAP = {
-    "逃げ切り": "逃げ切り",
-    "先行押し切り": "先行押し切り",
-    "好位差し": "好位差し",
-    "差し": "差し",
-    "追い込み": "追い込み",
-    "追込": "追い込み",
-    "まくり": "まくり",
-}
-
+# ---------- Utility ----------
 
 def read_csv_any(file_obj_or_path):
-    encodings = ["utf-8-sig", "cp932", "shift_jis", "utf-8"]
+    encodings = ['utf-8-sig', 'cp932', 'shift_jis', 'utf-8']
     last_err = None
     for enc in encodings:
         try:
-            if hasattr(file_obj_or_path, "seek"):
+            if hasattr(file_obj_or_path, 'seek'):
                 file_obj_or_path.seek(0)
             return pd.read_csv(file_obj_or_path, encoding=enc)
         except Exception as e:
@@ -71,288 +23,389 @@ def read_csv_any(file_obj_or_path):
     raise last_err
 
 
-def norm_text(v):
+def norm_text(v) -> str:
     if pd.isna(v):
-        return ""
-    s = unicodedata.normalize("NFKC", str(v)).strip()
-    return " ".join(s.split())
+        return ''
+    s = unicodedata.normalize('NFKC', str(v)).strip()
+    return ' '.join(s.split())
 
 
-def norm_track(v):
+def norm_track(v) -> str:
     s = norm_text(v)
     replace_map = {
-        "東京競馬場": "東京", "中山競馬場": "中山", "中京競馬場": "中京", "阪神競馬場": "阪神",
-        "京都競馬場": "京都", "新潟競馬場": "新潟", "福島競馬場": "福島", "小倉競馬場": "小倉",
-        "札幌競馬場": "札幌", "函館競馬場": "函館",
+        '東京競馬場': '東京', '中山競馬場': '中山', '中京競馬場': '中京', '阪神競馬場': '阪神',
+        '京都競馬場': '京都', '新潟競馬場': '新潟', '福島競馬場': '福島', '小倉競馬場': '小倉',
+        '札幌競馬場': '札幌', '函館競馬場': '函館',
     }
     return replace_map.get(s, s)
 
 
-def norm_surface(v):
+def norm_surface(v) -> str:
     s = norm_text(v)
-    if s.startswith("芝"):
-        return "芝"
-    if s.startswith("ダ") or s.startswith("ダート"):
-        return "ダ"
-    if s.startswith("障"):
-        return "障"
-    if s in ["芝", "ダ", "障"]:
-        return s
-    if s == "ダート":
-        return "ダ"
-    return s
+    if s.startswith('芝'):
+        return '芝'
+    if s.startswith('ダ') or s.startswith('ダート'):
+        return 'ダ'
+    if s.startswith('障'):
+        return '障'
+    return {'ダート': 'ダ'}.get(s, s)
 
 
-def parse_distance_field(v):
+def norm_style(v) -> str:
     s = norm_text(v)
-    if not s:
-        return "", np.nan
-    surface = norm_surface(s)
-    num = pd.to_numeric("".join(ch for ch in s if ch.isdigit()), errors="coerce")
-    return surface, num
+    mp = {
+        '逃': '逃げ', '逃げ': '逃げ',
+        '先': '先行', '先行': '先行',
+        '差': '差し', '差し': '差し',
+        '追': '追込', '追込': '追込', '追い込み': '追込',
+    }
+    return mp.get(s, s)
 
 
-def norm_style(v):
+def norm_winstyle(v) -> str:
     s = norm_text(v)
-    return STYLE_MAP.get(s, s)
+    mp = {
+        '逃げ切り': '逃げ切り',
+        '先行押し切り': '先行押し切り',
+        '好位差し': '好位差し',
+        '差し': '差し',
+        '追い込み': '追い込み',
+        '追込': '追い込み',
+        'まくり': 'まくり',
+    }
+    return mp.get(s, s)
 
 
-def norm_winstyle(v):
-    s = norm_text(v)
-    return WINSTYLE_MAP.get(s, s)
+def to_int(v):
+    if pd.isna(v):
+        return np.nan
+    s = ''.join(ch for ch in norm_text(v) if ch.isdigit())
+    return pd.to_numeric(s, errors='coerce')
 
 
-def rename_first_match(df, candidates_map):
-    df = df.copy()
-    rename_map = {}
-    for target, candidates in candidates_map.items():
-        for c in candidates:
-            if c in df.columns:
-                rename_map[c] = target
+def rename_first_match(df: pd.DataFrame, mapping: Dict[str, List[str]]) -> pd.DataFrame:
+    out = df.copy()
+    cols_norm = {norm_text(c): c for c in out.columns}
+    for target, candidates in mapping.items():
+        if target in out.columns:
+            continue
+        for cand in candidates:
+            actual = cols_norm.get(norm_text(cand))
+            if actual is not None:
+                out = out.rename(columns={actual: target})
                 break
-    return df.rename(columns=rename_map)
+    return out
 
 
-def prepare_race_df(df):
-    df = rename_first_match(df, RACE_COLUMN_CANDIDATES)
+MASTER_MAP = {
+    '日付': ['日付', '日付S', 'date'],
+    '場所': ['場所', 'track'],
+    '芝ダ': ['芝ダ', '芝・ダ', 'surface'],
+    '距離': ['距離', 'distance'],
+    'R': ['R', 'raceNo', 'レース番号'],
+    'レース名': ['レース名', 'raceName', 'レース'],
+    '馬番': ['馬番', 'horseNo'],
+    '馬名': ['馬名', 'horseName'],
+    '騎手': ['騎手', 'jockey'],
+    '調教師': ['調教師', 'trainer'],
+    '血統': ['血統', '種牡馬', 'sire'],
+    '母父馬': ['母父馬', 'damSire'],
+    '馬場状態': ['馬場状態', 'going', '馬場'],
+    '着順数値': ['着順数値', 'finish_rank', '着順'],
+    'win_flag': ['win_flag'],
+    'place_flag': ['place_flag'],
+    '脚質': ['脚質', 'style', '脚質タグ'],
+    '前走場所': ['前走場所', 'prevTrack', '前開催', '前走競馬場', '前走場所タグ'],
+    '勝ち方': ['勝ち方', '勝ち方タグ', 'winStyle'],
+}
 
-    # v8.1入力CSVは「芝ダ」「距離」を別列で持つ前提。
-    # 旧形式の distance=芝1200 / ダ1800 にも対応する。
-    for col in ["場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire",
-                "distance", "芝ダ", "距離", "going", "style", "prevTrack", "winStyle", "comment"]:
+RUNNER_MAP = {
+    '場所': ['場所', 'track'],
+    '芝ダ': ['芝ダ', '芝・ダ', 'surface'],
+    '距離': ['距離', 'distance'],
+    'レース': ['レース', 'raceName', 'レース名'],
+    'raceNo': ['raceNo', 'R', 'レース番号'],
+    '馬番': ['馬番', 'horseNo'],
+    '馬名': ['馬名', 'horseName'],
+    '血統': ['血統', '種牡馬', 'sire'],
+    '調教師': ['調教師', 'trainer'],
+    '脚質': ['脚質', 'style'],
+    '前走場所': ['前走場所', 'prevTrack', '前開催'],
+    '勝ち方': ['勝ち方', 'winStyle'],
+}
+
+RESULT_MAP = {
+    'レース': ['レース', 'raceName', 'レース名'],
+    '馬名': ['馬名', 'horseName'],
+    '着順': ['着順', 'finish_rank', '実着順'],
+}
+
+SPECS = [
+    ('血統', '血統', '血統点', '血統母数'),
+    ('調教師', '調教師', '調教師点', '調教師母数'),
+    ('脚質', '脚質', '脚質点', '脚質母数'),
+    ('前走場所', '前走場所', '前走場所点', '前走場所母数'),
+    ('勝ち方', '勝ち方', '勝ち方点', '勝ち方母数'),
+]
+
+
+def prepare_master(df: pd.DataFrame) -> pd.DataFrame:
+    df = rename_first_match(df, MASTER_MAP)
+    for col in MASTER_MAP:
         if col not in df.columns:
-            df[col] = ""
+            df[col] = ''
 
-    df["場所"] = df["場所"].apply(norm_track)
-    df["trainer"] = df["trainer"].apply(norm_text)
-    df["sire"] = df["sire"].apply(norm_text)
-    df["horseName"] = df["horseName"].apply(norm_text)
-    df["prevTrack"] = df["prevTrack"].apply(norm_track)
-    df["style"] = df["style"].apply(norm_style)
-    df["winStyle"] = df["winStyle"].apply(norm_winstyle)
-    df["going"] = df["going"].apply(norm_text)
+    df['場所'] = df['場所'].apply(norm_track)
+    df['芝ダ'] = df['芝ダ'].apply(norm_surface)
+    df['距離'] = pd.to_numeric(df['距離'], errors='coerce')
+    df['馬名'] = df['馬名'].apply(norm_text)
+    df['調教師'] = df['調教師'].apply(norm_text)
+    df['血統'] = df['血統'].apply(norm_text)
+    df['脚質'] = df['脚質'].apply(norm_style)
+    df['前走場所'] = df['前走場所'].apply(norm_track)
+    df['勝ち方'] = df['勝ち方'].apply(norm_winstyle)
+    df['着順数値'] = pd.to_numeric(df['着順数値'], errors='coerce')
 
-    # まずは別列の芝ダ / 距離を優先
-    df["芝ダ"] = df["芝ダ"].apply(norm_surface)
-    df["距離"] = pd.to_numeric(df["距離"], errors="coerce")
+    if 'win_flag' not in df.columns or df['win_flag'].astype(str).eq('').all():
+        df['win_flag'] = (df['着順数値'] == 1).astype(int)
+    else:
+        df['win_flag'] = pd.to_numeric(df['win_flag'], errors='coerce').fillna(0).astype(int)
 
-    # 別列が空欄のときだけ旧形式distance列から補完
-    parsed = df["distance"].apply(parse_distance_field)
-    parsed_surface = parsed.apply(lambda x: x[0])
-    parsed_dist = parsed.apply(lambda x: x[1])
-
-    df["芝ダ"] = np.where(
-        df["芝ダ"].astype(str).str.strip() != "",
-        df["芝ダ"],
-        parsed_surface
-    )
-    df["距離"] = df["距離"].where(df["距離"].notna(), parsed_dist)
+    if 'place_flag' not in df.columns or df['place_flag'].astype(str).eq('').all():
+        df['place_flag'] = df['着順数値'].between(1, 3, inclusive='both').fillna(False).astype(int)
+    else:
+        df['place_flag'] = pd.to_numeric(df['place_flag'], errors='coerce').fillna(0).astype(int)
 
     return df
 
 
-def prepare_stat_table(df, kind):
-    spec = TABLE_SPECS[kind]
-    df = df.copy()
-    df.columns = [norm_text(c) for c in df.columns]
-    required = ["場所", "芝ダ", "距離", spec["jp_col"], "母数", "複勝数"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise ValueError(f"{spec['label']}テーブルに必須列が不足: {', '.join(missing)}")
+def prepare_runners(df: pd.DataFrame) -> pd.DataFrame:
+    df = rename_first_match(df, RUNNER_MAP)
+    for col in RUNNER_MAP:
+        if col not in df.columns:
+            df[col] = ''
 
-    df = df[required + [c for c in ["勝利数", "単勝率", "複勝率"] if c in df.columns]].copy()
-    df["場所"] = df["場所"].apply(norm_track)
-    df["芝ダ"] = df["芝ダ"].apply(norm_surface)
-    df[spec["jp_col"]] = df[spec["jp_col"]].apply(norm_text)
-    if kind == "style":
-        df[spec["jp_col"]] = df[spec["jp_col"]].apply(norm_style)
-    if kind == "winstyle":
-        df[spec["jp_col"]] = df[spec["jp_col"]].apply(norm_winstyle)
-    if kind == "prevtrack":
-        df[spec["jp_col"]] = df[spec["jp_col"]].apply(norm_track)
-    df["距離"] = pd.to_numeric(df["距離"], errors="coerce")
-    df["母数"] = pd.to_numeric(df["母数"], errors="coerce").fillna(0)
-    df["複勝数"] = pd.to_numeric(df["複勝数"], errors="coerce").fillna(0)
-    df["補正複勝率"] = (df["複勝数"] + 1) / (df["母数"] + 3)
+    df['場所'] = df['場所'].apply(norm_track)
+    df['芝ダ'] = df['芝ダ'].apply(norm_surface)
+    # Allow old format distance like 芝1200 only if 芝ダ/距離 missing
+    if 'distance' in df.columns:
+        old_dist = df['distance'].apply(norm_text)
+        fill_surface = old_dist.apply(norm_surface)
+        fill_dist = old_dist.apply(to_int)
+        df['芝ダ'] = np.where(df['芝ダ'].astype(str).str.strip() != '', df['芝ダ'], fill_surface)
+        df['距離'] = np.where(pd.to_numeric(df['距離'], errors='coerce').notna(), pd.to_numeric(df['距離'], errors='coerce'), fill_dist)
+    else:
+        df['距離'] = pd.to_numeric(df['距離'], errors='coerce')
+    df['距離'] = pd.to_numeric(df['距離'], errors='coerce')
 
-    fallback = df.groupby(["場所", "芝ダ", "距離"], dropna=False).agg(
-        母数合計=("母数", "sum"),
-        複勝数合計=("複勝数", "sum")
-    ).reset_index()
-    fallback["全体平均複勝率"] = np.where(
-        fallback["母数合計"] > 0,
-        fallback["複勝数合計"] / fallback["母数合計"],
-        np.nan,
+    for col in ['レース', '馬名', '血統', '調教師']:
+        df[col] = df[col].apply(norm_text)
+    df['脚質'] = df['脚質'].apply(norm_style)
+    df['前走場所'] = df['前走場所'].apply(norm_track)
+    df['勝ち方'] = df['勝ち方'].apply(norm_winstyle)
+    return df
+
+
+def prepare_results(df: pd.DataFrame) -> pd.DataFrame:
+    df = rename_first_match(df, RESULT_MAP)
+    for col in RESULT_MAP:
+        if col not in df.columns:
+            df[col] = ''
+    df['レース'] = df['レース'].apply(norm_text)
+    df['馬名'] = df['馬名'].apply(norm_text)
+    df['着順'] = pd.to_numeric(df['着順'], errors='coerce')
+    return df[['レース', '馬名', '着順']].copy()
+
+
+@st.cache_data(show_spinner=False)
+def build_stats(master_df: pd.DataFrame, attr_col: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    base_cols = ['場所', '芝ダ', '距離']
+    attr = attr_col
+    use = master_df[base_cols + [attr, 'win_flag', 'place_flag']].copy()
+    use[attr] = use[attr].apply(norm_text)
+    if attr in ['前走場所']:
+        use[attr] = use[attr].apply(norm_track)
+    if attr in ['脚質']:
+        use[attr] = use[attr].apply(norm_style)
+    if attr in ['勝ち方']:
+        use[attr] = use[attr].apply(norm_winstyle)
+
+    detailed = (
+        use[use[attr] != '']
+        .groupby(base_cols + [attr], dropna=False)
+        .agg(母数=('place_flag', 'size'), 勝利数=('win_flag', 'sum'), 複勝数=('place_flag', 'sum'))
+        .reset_index()
     )
-    return df, fallback
+    detailed['単勝率'] = detailed['勝利数'] / detailed['母数']
+    detailed['複勝率'] = detailed['複勝数'] / detailed['母数']
+    detailed['補正複勝率'] = (detailed['複勝数'] + 1) / (detailed['母数'] + 3)
 
-
-def lookup_component(row, table_df, fallback_df, kind):
-    spec = TABLE_SPECS[kind]
-    value_col_race = {
-        "bloodline": "sire",
-        "trainer": "trainer",
-        "style": "style",
-        "prevtrack": "prevTrack",
-        "winstyle": "winStyle",
-    }[kind]
-    jp_col = spec["jp_col"]
-    target_value = norm_text(row.get(value_col_race, ""))
-    if kind == "style":
-        target_value = norm_style(target_value)
-    elif kind == "winstyle":
-        target_value = norm_winstyle(target_value)
-    elif kind == "prevtrack":
-        target_value = norm_track(target_value)
-
-    cond = (
-        (table_df["場所"] == norm_track(row.get("場所", ""))) &
-        (table_df["芝ダ"] == norm_surface(row.get("芝ダ", ""))) &
-        (table_df["距離"] == pd.to_numeric(row.get("距離", np.nan), errors="coerce")) &
-        (table_df[jp_col] == target_value)
+    fallback = (
+        use.groupby(base_cols, dropna=False)
+        .agg(条件母数=('place_flag', 'size'), 条件勝利数=('win_flag', 'sum'), 条件複勝数=('place_flag', 'sum'))
+        .reset_index()
     )
-    hit = table_df.loc[cond]
-    if not hit.empty:
-        best = hit.sort_values(["母数", "複勝数"], ascending=False).iloc[0]
-        return {
-            "score": round(float(best["補正複勝率"]) * 100, 2),
-            "count": int(best["母数"]),
-            "rate": round(float(best["補正複勝率"]) * 100, 2),
-            "matched": target_value,
-            "source": "完全一致",
-        }
-
-    fb_cond = (
-        (fallback_df["場所"] == norm_track(row.get("場所", ""))) &
-        (fallback_df["芝ダ"] == norm_surface(row.get("芝ダ", ""))) &
-        (fallback_df["距離"] == pd.to_numeric(row.get("距離", np.nan), errors="coerce"))
-    )
-    fb = fallback_df.loc[fb_cond]
-    if not fb.empty and pd.notna(fb.iloc[0]["全体平均複勝率"]):
-        item = fb.iloc[0]
-        return {
-            "score": round(float(item["全体平均複勝率"]) * 100, 2),
-            "count": int(item["母数合計"]),
-            "rate": round(float(item["全体平均複勝率"]) * 100, 2),
-            "matched": target_value,
-            "source": "条件平均",
-        }
-
-    return {"score": np.nan, "count": np.nan, "rate": np.nan, "matched": target_value, "source": "該当なし"}
+    fallback['条件平均複勝率'] = fallback['条件複勝数'] / fallback['条件母数']
+    fallback['条件補正複勝率'] = (fallback['条件複勝数'] + 1) / (fallback['条件母数'] + 3)
+    return detailed, fallback
 
 
-def score_race_df(race_df, prepared_tables):
-    out = race_df.copy()
-    score_cols = []
-    for kind, payload in prepared_tables.items():
-        table_df, fallback_df = payload
-        spec = TABLE_SPECS[kind]
-        result = out.apply(lambda row: lookup_component(row, table_df, fallback_df, kind), axis=1)
-        out[spec["score_col"]] = result.apply(lambda x: x["score"])
-        out[spec["count_col"]] = result.apply(lambda x: x["count"])
-        out[f"{spec['label']}参照"] = result.apply(lambda x: x["source"])
-        score_cols.append(spec["score_col"])
+def score_runners(runners: pd.DataFrame, master_df: pd.DataFrame, weights: Dict[str, int]) -> pd.DataFrame:
+    out = runners.copy()
+    contribution_cols = []
 
-    out["総合点"] = out[score_cols].mean(axis=1, skipna=True).round(2)
-    out["順位"] = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].rank(method="min", ascending=False)
-    out["順位"] = out["順位"].fillna(999).astype(int)
-    out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
+    for attr, key_col, score_col, count_col in SPECS:
+        detail, fallback = build_stats(master_df, key_col)
+        detail = detail.rename(columns={key_col: f'{key_col}_key'})
+        fallback_cols = ['場所', '芝ダ', '距離', '条件補正複勝率', '条件母数']
+        merged = out.merge(
+            detail[['場所', '芝ダ', '距離', f'{key_col}_key', '補正複勝率', '母数']],
+            left_on=['場所', '芝ダ', '距離', key_col],
+            right_on=['場所', '芝ダ', '距離', f'{key_col}_key'],
+            how='left'
+        ).merge(
+            fallback[fallback_cols],
+            on=['場所', '芝ダ', '距離'],
+            how='left'
+        )
+        rate = merged['補正複勝率'].where(merged['補正複勝率'].notna(), merged['条件補正複勝率'])
+        mothers = merged['母数'].where(merged['母数'].notna(), merged['条件母数'])
+        out[count_col] = mothers.fillna(0).astype(float).round(0).astype(int)
+        out[score_col] = (rate.fillna(0) * weights[attr]).round(2)
+        contribution_cols.append(score_col)
+
+    out['総合点'] = out[contribution_cols].sum(axis=1).round(2)
+    out['最大加点項目'] = out[contribution_cols].idxmax(axis=1).str.replace('点', '', regex=False)
+    out['最大加点値'] = out[contribution_cols].max(axis=1).round(2)
+    out['最小加点項目'] = out[contribution_cols].idxmin(axis=1).str.replace('点', '', regex=False)
+    out['最小加点値'] = out[contribution_cols].min(axis=1).round(2)
+
+    race_keys = ['場所', '芝ダ', '距離']
+    if 'レース' in out.columns and out['レース'].astype(str).str.strip().ne('').any():
+        race_keys = ['場所', '芝ダ', '距離', 'レース']
+    out['順位'] = out.groupby(race_keys)['総合点'].rank(method='min', ascending=False).astype(int)
     return out
 
 
-def classify_score(score):
-    if pd.isna(score):
-        return ""
-    if score >= 40:
-        return "A"
-    if score >= 34:
-        return "B"
-    if score >= 28:
-        return "C"
-    return "D"
+def add_results(scored: pd.DataFrame, results: pd.DataFrame) -> pd.DataFrame:
+    if results is None or results.empty:
+        return scored
+    out = scored.copy()
+    merge_keys = ['馬名']
+    if 'レース' in out.columns and out['レース'].astype(str).str.strip().ne('').any() and results['レース'].astype(str).str.strip().ne('').any():
+        merge_keys = ['レース', '馬名']
+    out = out.merge(results, on=merge_keys, how='left')
+    out['複勝圏'] = np.where(out['着順'].between(1, 3, inclusive='both'), '○', '')
+    out['1着'] = np.where(out['着順'] == 1, '○', '')
+    return out
 
 
-st.title("競馬ランクアプリ v8.1 Master Scoring")
-st.write("5つの集計テーブルを参照して、出走馬を自動採点します。")
+def summary_by_race(df: pd.DataFrame) -> pd.DataFrame:
+    group_cols = ['場所', '芝ダ', '距離']
+    if 'レース' in df.columns and df['レース'].astype(str).str.strip().ne('').any():
+        group_cols.append('レース')
+    agg = df.groupby(group_cols, dropna=False).agg(
+        頭数=('馬名', 'size'),
+        予想1位複勝=('複勝圏', lambda s: int((s == '○').sum()) if len(s) else 0),
+        予想1位勝利=('1着', lambda s: int((s == '○').sum()) if len(s) else 0),
+    ).reset_index()
+    return agg
 
-with st.sidebar:
-    st.subheader("入力ファイル")
-    race_file = st.file_uploader("出走馬CSV", type=["csv"], key="race")
-    uploaded_stats = {}
-    for kind, spec in TABLE_SPECS.items():
-        uploaded_stats[kind] = st.file_uploader(f"{spec['label']}テーブルCSV（任意）", type=["csv"], key=f"stat_{kind}")
-    st.caption("集計テーブルを未指定にした場合は、同じフォルダの既定CSVを使います。")
 
-if race_file is None:
-    st.info("まず出走馬CSVをアップロードしてください。")
+# ---------- UI ----------
+st.title('競馬ロジック検証アプリ v1')
+st.caption('3年分元データから全頭診断・項目寄与確認・結果照合を行う検証専用版')
+
+with st.expander('使い方', expanded=False):
+    st.markdown(
+        '- 元データCSVを読み込みます。\n'
+        '- 出走馬CSVを読み込みます。\n'
+        '- 重みを調整すると総合点が即時再計算されます。\n'
+        '- 結果CSVを入れると着順照合ができます。'
+    )
+
+col1, col2 = st.columns(2)
+with col1:
+    master_file = st.file_uploader('① 元データCSV（3年分）', type=['csv'], key='master')
+    runners_file = st.file_uploader('② 出走馬CSV', type=['csv'], key='runners')
+with col2:
+    results_file = st.file_uploader('③ 結果CSV（任意）', type=['csv'], key='results')
+    st.markdown('**重み設定（合計100推奨）**')
+    weights = {
+        '血統': st.slider('血統', 0, 100, 20, 1),
+        '調教師': st.slider('調教師', 0, 100, 20, 1),
+        '脚質': st.slider('脚質', 0, 100, 20, 1),
+        '前走場所': st.slider('前走場所', 0, 100, 20, 1),
+        '勝ち方': st.slider('勝ち方', 0, 100, 20, 1),
+    }
+    st.caption(f"現在の合計: {sum(weights.values())}")
+
+if not master_file or not runners_file:
+    st.info('元データCSVと出走馬CSVをアップロードしてください。')
     st.stop()
 
 try:
-    race_df_raw = read_csv_any(race_file)
-    race_df = prepare_race_df(race_df_raw)
-
-    prepared_tables = {}
-    for kind in TABLE_SPECS:
-        src = uploaded_stats[kind] if uploaded_stats[kind] is not None else DEFAULT_FILES[kind]
-        if isinstance(src, str) and not os.path.exists(src):
-            raise FileNotFoundError(f"既定ファイルが見つかりません: {src}")
-        stat_df = read_csv_any(src)
-        prepared_tables[kind] = prepare_stat_table(stat_df, kind)
-
-    result_df = score_race_df(race_df, prepared_tables)
-    result_df["信頼度"] = result_df["総合点"].apply(classify_score)
-
-    show_cols = [
-        "場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire",
-        "芝ダ", "距離", "going", "style", "prevTrack", "winStyle",
-        "血統点", "調教師点", "脚質点", "前走場所点", "勝ち方点", "総合点", "信頼度", "順位",
-        "血統母数", "調教師母数", "脚質母数", "前走場所母数", "勝ち方母数",
-        "血統参照", "調教師参照", "脚質参照", "前走場所参照", "勝ち方参照", "comment"
-    ]
-    for c in show_cols:
-        if c not in result_df.columns:
-            result_df[c] = ""
-    export_df = result_df[show_cols].copy()
-
-    st.success("自動採点が完了しました。")
-
-    tab1, tab2, tab3 = st.tabs(["採点結果", "レース別上位", "元データ確認"])
-    with tab1:
-        st.dataframe(export_df, use_container_width=True, height=700)
-    with tab2:
-        top_df = export_df.sort_values(["場所", "raceNo", "順位"]).groupby(["場所", "raceNo"], as_index=False).head(3)
-        st.dataframe(top_df[["場所", "raceNo", "horseNo", "horseName", "総合点", "信頼度", "順位"]], use_container_width=True)
-    with tab3:
-        st.write("出走馬CSV")
-        st.dataframe(race_df_raw, use_container_width=True)
-
-    csv_data = export_df.to_csv(index=False).encode("utf-8-sig")
-    st.download_button(
-        label="採点結果CSVをダウンロード",
-        data=csv_data,
-        file_name="master_scored_racecards.csv",
-        mime="text/csv",
-    )
-
+    master_raw = read_csv_any(master_file)
+    runners_raw = read_csv_any(runners_file)
+    results_raw = read_csv_any(results_file) if results_file else None
 except Exception as e:
-    st.error(f"エラーが発生しました: {e}")
+    st.error(f'CSVの読み込みに失敗しました: {e}')
+    st.stop()
+
+master_df = prepare_master(master_raw)
+runners_df = prepare_runners(runners_raw)
+results_df = prepare_results(results_raw) if results_raw is not None else None
+
+with st.expander('読み込み確認', expanded=False):
+    st.write('元データ件数:', len(master_df))
+    st.write('出走馬件数:', len(runners_df))
+    if results_df is not None:
+        st.write('結果件数:', len(results_df))
+    st.write('元データ列:', list(master_raw.columns))
+    st.write('出走馬列:', list(runners_raw.columns))
+
+scored = score_runners(runners_df, master_df, weights)
+scored = add_results(scored, results_df)
+
+# Tabs
+main_tab, effect_tab, result_tab, export_tab = st.tabs(['全頭診断', '効いた項目', '結果照合', 'CSV出力'])
+
+with main_tab:
+    show_cols = [
+        c for c in ['順位', 'レース', '馬番', '馬名', '血統点', '調教師点', '脚質点', '前走場所点', '勝ち方点',
+                    '総合点', '血統母数', '調教師母数', '脚質母数', '前走場所母数', '勝ち方母数'] if c in scored.columns
+    ]
+    display_df = scored.sort_values(['順位', '総合点'], ascending=[True, False])[show_cols]
+    st.dataframe(display_df, use_container_width=True, height=700)
+
+with effect_tab:
+    effect_cols = [c for c in ['順位', 'レース', '馬名', '最大加点項目', '最大加点値', '最小加点項目', '最小加点値',
+                               '血統点', '調教師点', '脚質点', '前走場所点', '勝ち方点', '総合点'] if c in scored.columns]
+    st.dataframe(scored.sort_values(['順位', '総合点'], ascending=[True, False])[effect_cols], use_container_width=True, height=700)
+    avg_cols = ['血統点', '調教師点', '脚質点', '前走場所点', '勝ち方点', '総合点']
+    st.subheader('レース全体の平均点')
+    st.dataframe(scored[avg_cols].mean().round(2).rename('平均').to_frame().T, use_container_width=True)
+
+with result_tab:
+    if results_df is None or results_df.empty:
+        st.info('結果CSVを入れると実着順との照合が表示されます。')
+    else:
+        result_cols = [c for c in ['順位', 'レース', '馬名', '総合点', '着順', '複勝圏', '1着', '最大加点項目', '最大加点値'] if c in scored.columns]
+        st.dataframe(scored.sort_values(['順位', '着順'], ascending=[True, True])[result_cols], use_container_width=True, height=700)
+        top1 = scored[scored['順位'] == 1].copy()
+        if not top1.empty:
+            top1_summary = {
+                '予想1位頭数': len(top1),
+                '予想1位の勝利数': int((top1['着順'] == 1).sum()),
+                '予想1位の複勝数': int(top1['着順'].between(1, 3, inclusive='both').sum()),
+                '予想1位単勝率': round((top1['着順'] == 1).mean(), 4) if len(top1) else 0,
+                '予想1位複勝率': round(top1['着順'].between(1, 3, inclusive='both').mean(), 4) if len(top1) else 0,
+            }
+            st.subheader('予想1位の成績')
+            st.json(top1_summary)
+
+with export_tab:
+    export_df = scored.copy()
+    st.dataframe(export_df, use_container_width=True, height=500)
+    csv_bytes = export_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+    st.download_button('診断結果CSVをダウンロード', data=csv_bytes, file_name='validation_scored_output.csv', mime='text/csv')
