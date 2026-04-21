@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v9.4 Dual Rank", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v9.5 Dual Relative+Real", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -117,6 +117,17 @@ def parse_race_label(v):
     if m:
         return m.group(1), m.group(2)
     return "", ""
+
+
+def make_race_key_df(df):
+    place = df.get("場所", "").astype(str) if "場所" in df.columns else ""
+    raceno = df.get("raceNo", "").astype(str) if "raceNo" in df.columns else ""
+    label = df.get("raceLabel", "").astype(str) if "raceLabel" in df.columns else ""
+    key = (place.fillna("").astype(str).str.strip() + "_" + raceno.fillna("").astype(str).str.strip()).str.strip("_")
+    if isinstance(label, str):
+        return key
+    key = key.where(key != "", label.fillna("").astype(str).str.strip())
+    return key
 
 def prepare_race_df(df):
     df = rename_first_match(df, RACE_COLUMN_CANDIDATES)
@@ -256,11 +267,12 @@ def classify_real_rank(score):
 
 def assign_relative_ranks_df(df):
     out = df.copy()
-    out["ランク"] = "C"
+    out["相対評価"] = "C"
+    if "レースキー" not in out.columns:
+        out["レースキー"] = make_race_key_df(out)
 
-    keys = out[["場所", "raceNo"]].drop_duplicates().itertuples(index=False, name=None)
-    for place_val, race_no_val in keys:
-        mask = (out["場所"] == place_val) & (out["raceNo"] == race_no_val)
+    for race_key in out["レースキー"].fillna("").astype(str).unique():
+        mask = out["レースキー"].fillna("").astype(str) == race_key
         idx = out.loc[mask].sort_values(["総合点", "horseNo"], ascending=[False, True]).index.tolist()
         n = len(idx)
         if n == 0:
@@ -269,33 +281,27 @@ def assign_relative_ranks_df(df):
         d_count = max(1, round(n * 0.30)) if n >= 8 else max(1, round(n * 0.20))
         a_count = max(1, round(n * 0.15))
         b_count = max(1, round(n * 0.20))
-
         if a_count + b_count + d_count >= n:
             d_count = max(1, n - a_count - b_count - 1)
 
-        # default all C
-        out.loc[idx, "ランク"] = "C"
+        out.loc[idx, "相対評価"] = "C"
 
-        # S is top only if enough score
+        cursor = 0
         top_idx = idx[0]
         top_score = out.at[top_idx, "総合点"]
-        cursor = 0
         if pd.notna(top_score) and top_score >= 33.00:
-            out.at[top_idx, "ランク"] = "S"
+            out.at[top_idx, "相対評価"] = "S"
             cursor = 1
 
-        # A
-        for i in idx[cursor: min(n - d_count, cursor + a_count)]:
-            out.at[i, "ランク"] = "A"
+        for i in idx[cursor:min(n - d_count, cursor + a_count)]:
+            out.at[i, "相対評価"] = "A"
         cursor = min(n - d_count, cursor + a_count)
 
-        # B
-        for i in idx[cursor: min(n - d_count, cursor + b_count)]:
-            out.at[i, "ランク"] = "B"
+        for i in idx[cursor:min(n - d_count, cursor + b_count)]:
+            out.at[i, "相対評価"] = "B"
 
-        # D
         for i in idx[max(0, n - d_count):]:
-            out.at[i, "ランク"] = "D"
+            out.at[i, "相対評価"] = "D"
 
     return out
 
@@ -310,13 +316,13 @@ def score_race_df(race_df, prepared_tables):
         weighted_parts.append(out[score_col] * (WEIGHTS[kind] / 100.0))
 
     out["総合点"] = sum(weighted_parts).round(2)
-    out["順位"] = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].rank(method="min", ascending=False)
+    out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
+    out["レースキー"] = make_race_key_df(out)
+    out["順位"] = out.groupby("レースキー", dropna=False)["総合点"].rank(method="min", ascending=False)
     out["順位"] = out["順位"].fillna(999).astype(int)
     out["リアル評価"] = out["総合点"].apply(classify_real_rank)
-    out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
     out = assign_relative_ranks_df(out)
-    out = out.rename(columns={"ランク": "相対評価"})
-    out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
+    out = out.sort_values(["レースキー", "順位", "horseNo"], ascending=[True, True, True])
     return out
 
 def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
@@ -361,8 +367,8 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
     for _, row in card_df.iterrows():
         horse_no = str(row.get("馬番", "")).strip()
         horse_name = str(row.get("馬名", "")).strip()
-        rel_rank = str(row.get("相対評価", "")).strip()
-        real_rank = str(row.get("リアル評価", "")).strip()
+        rel_rank = str(row.get("相対", "")).strip()
+        real_rank = str(row.get("実力", "")).strip()
         rel_cls = f"rank-{rel_rank}" if rel_rank in {"S", "A", "B", "C", "D"} else "rank-D"
         real_cls = f"rank-{real_rank}" if real_rank in {"S", "A", "B", "C", "D"} else "rank-D"
         html += (
@@ -374,15 +380,14 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
             f'<div class="pill-area">'
             f'<div class="rank-box"><div class="rank-label">相対</div><div class="rank-pill {rel_cls}">{rel_rank}</div></div>'
             f'<div class="rank-box"><div class="rank-label">実力</div><div class="rank-pill {real_cls}">{real_rank}</div></div>'
-            f'</div>'
-            f'</div>'
+            f'</div></div>'
         )
     html += '</div>'
     return html
 
 
-st.title("競馬ランクアプリ v9.4 Dual Rank")
-st.write("レース内の相対評価に加えて、内部点数ベースのリアル評価も並べて表示します。")
+st.title("競馬ランクアプリ v9.5 Dual Relative+Real")
+st.write("4項目で内部採点し、レース内の相対評価と、内部点数ベースの実評価を並べて表示します。")
 
 with st.sidebar:
     st.subheader("出走馬CSV")
@@ -394,7 +399,7 @@ with st.sidebar:
     damsire_file = st.file_uploader("母父馬CSV", type=["csv"], key="damsire")
 
 st.caption("現在の比重：脚質37.5 / 前走場所22.5 / 種牡馬15 / 母父馬25")
-st.caption("左が相対評価、右がリアル評価です。相対評価はレース内順位、リアル評価は内部点数帯をそのまま表示します。")
+st.caption("左が相対評価、右が実評価です。相対評価はレース内比較、実評価は内部点数帯です。")
 
 if race_file is None:
     st.info("まず出走馬CSVをアップロードしてください。")
@@ -429,7 +434,7 @@ try:
     with tab1:
         grouped = result_df.groupby(["date", "レース", "raceName", "距離表示"], dropna=False, sort=False)
         for (date_val, race_val, race_name_val, dist_val), g in grouped:
-            show_df = g[["horseNo", "horseName", "相対評価", "リアル評価"]].copy().rename(columns={"horseNo": "馬番", "horseName": "馬名"})
+            show_df = g[["horseNo", "horseName", "相対評価", "リアル評価"]].copy().rename(columns={"horseNo": "馬番", "horseName": "馬名", "相対評価": "相対", "リアル評価": "実力"})
             st.markdown(render_rank_cards(date_val, race_val, race_name_val, dist_val, show_df), unsafe_allow_html=True)
 
     with tab2:
