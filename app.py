@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v8.2 Weighted Master", layout="wide")
+st.set_page_config(page_title="競馬ランクアプリ v8.4 Rank View", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -24,6 +24,7 @@ TABLE_SPECS = {
 }
 
 RACE_COLUMN_CANDIDATES = {
+    "date": ["date", "日付", "開催日", "年月日"],
     "場所": ["場所", "track", "競馬場", "開催", "場名"],
     "raceNo": ["raceNo", "race_number", "raceNo.", "R", "レース番号", "race_no"],
     "raceName": ["raceName", "race_name", "レース名", "レース"],
@@ -138,11 +139,12 @@ def prepare_race_df(df):
 
     # v8.1入力CSVは「芝ダ」「距離」を別列で持つ前提。
     # 旧形式の distance=芝1200 / ダ1800 にも対応する。
-    for col in ["場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire",
+    for col in ["date", "場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire",
                 "distance", "芝ダ", "距離", "going", "style", "prevTrack", "winStyle", "comment"]:
         if col not in df.columns:
             df[col] = ""
 
+    df["date"] = df["date"].apply(norm_text)
     df["場所"] = df["場所"].apply(norm_track)
     df["trainer"] = df["trainer"].apply(norm_text)
     df["sire"] = df["sire"].apply(norm_text)
@@ -181,6 +183,7 @@ def prepare_stat_table(df, kind):
         raise ValueError(f"{spec['label']}テーブルに必須列が不足: {', '.join(missing)}")
 
     df = df[required + [c for c in ["勝利数", "単勝率", "複勝率"] if c in df.columns]].copy()
+    df["date"] = df["date"].apply(norm_text)
     df["場所"] = df["場所"].apply(norm_track)
     df["芝ダ"] = df["芝ダ"].apply(norm_surface)
     df[spec["jp_col"]] = df[spec["jp_col"]].apply(norm_text)
@@ -263,7 +266,14 @@ def lookup_component(row, table_df, fallback_df, kind):
 
 def score_race_df(race_df, prepared_tables):
     out = race_df.copy()
-    score_cols = []
+    weights = {
+        "bloodline": 8,
+        "trainer": 12,
+        "style": 35,
+        "prevtrack": 20,
+        "winstyle": 25,
+    }
+    weighted_parts = []
     for kind, payload in prepared_tables.items():
         table_df, fallback_df = payload
         spec = TABLE_SPECS[kind]
@@ -271,9 +281,9 @@ def score_race_df(race_df, prepared_tables):
         out[spec["score_col"]] = result.apply(lambda x: x["score"])
         out[spec["count_col"]] = result.apply(lambda x: x["count"])
         out[f"{spec['label']}参照"] = result.apply(lambda x: x["source"])
-        score_cols.append(spec["score_col"])
+        weighted_parts.append(out[spec["score_col"]] * (weights[kind] / 100.0))
 
-    out["総合点"] = out[score_cols].mean(axis=1, skipna=True).round(2)
+    out["総合点"] = sum(weighted_parts).round(2)
     out["順位"] = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].rank(method="min", ascending=False)
     out["順位"] = out["順位"].fillna(999).astype(int)
     out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
@@ -283,17 +293,19 @@ def score_race_df(race_df, prepared_tables):
 def classify_score(score):
     if pd.isna(score):
         return ""
-    if score >= 40:
+    if score >= 36:
+        return "S"
+    if score >= 31:
         return "A"
-    if score >= 34:
+    if score >= 26:
         return "B"
-    if score >= 28:
+    if score >= 21:
         return "C"
     return "D"
 
 
-st.title("競馬ランクアプリ v8.2 Weighted Master")
-st.write("5つの集計テーブルを参照して、出走馬を自動採点します。")
+st.title("競馬ランクアプリ v8.4 Rank View")
+st.write("内部で自動採点し、表示は日付・レース・レース名・馬名・ランクだけに絞っています。")
 
 with st.sidebar:
     st.subheader("入力ファイル")
@@ -322,36 +334,36 @@ try:
     result_df = score_race_df(race_df, prepared_tables)
     result_df["信頼度"] = result_df["総合点"].apply(classify_score)
 
-    show_cols = [
-        "場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire",
-        "芝ダ", "距離", "going", "style", "prevTrack", "winStyle",
-        "血統点", "調教師点", "脚質点", "前走場所点", "勝ち方点", "総合点", "信頼度", "順位",
-        "血統母数", "調教師母数", "脚質母数", "前走場所母数", "勝ち方母数",
-        "血統参照", "調教師参照", "脚質参照", "前走場所参照", "勝ち方参照", "comment"
-    ]
-    for c in show_cols:
+    # 表示と出力は最小限に整理
+    result_df["レース"] = result_df["場所"].astype(str) + result_df["raceNo"].astype(str) + "R"
+    simple_cols = ["date", "レース", "raceName", "horseName", "信頼度"]
+    for c in simple_cols:
         if c not in result_df.columns:
             result_df[c] = ""
-    export_df = result_df[show_cols].copy()
+    export_df = result_df[simple_cols].copy()
+    export_df = export_df.rename(columns={
+        "date": "日付",
+        "raceName": "レース名",
+        "horseName": "馬名",
+        "信頼度": "ランク",
+    })
 
     st.success("自動採点が完了しました。")
     st.caption("現在の比重：脚質35 / 勝ち方25 / 前走場所20 / 調教師12 / 血統8")
+    st.caption("表示は簡潔化し、ランクは S〜D のみ表示しています。")
 
-    tab1, tab2, tab3 = st.tabs(["採点結果", "レース別上位", "元データ確認"])
+    tab1, tab2 = st.tabs(["予想結果", "元データ確認"])
     with tab1:
         st.dataframe(export_df, use_container_width=True, height=700)
     with tab2:
-        top_df = export_df.sort_values(["場所", "raceNo", "順位"]).groupby(["場所", "raceNo"], as_index=False).head(3)
-        st.dataframe(top_df[["場所", "raceNo", "horseNo", "horseName", "総合点", "信頼度", "順位"]], use_container_width=True)
-    with tab3:
         st.write("出走馬CSV")
         st.dataframe(race_df_raw, use_container_width=True)
 
     csv_data = export_df.to_csv(index=False).encode("utf-8-sig")
     st.download_button(
-        label="採点結果CSVをダウンロード",
+        label="予想結果CSVをダウンロード",
         data=csv_data,
-        file_name="master_scored_racecards.csv",
+        file_name="rank_view_predictions.csv",
         mime="text/csv",
     )
 
