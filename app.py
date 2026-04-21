@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v9.0 4Factor", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v9.3 Relative Rank", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -229,12 +229,6 @@ def lookup_component(row, table_df, fallback_df, kind):
 def classify_rank(score):
     if pd.isna(score):
         return ""
-    # 4項目版の3年分実績ベース再設計
-    # S: 43.00点以上   -> 複勝率 95.59%
-    # A: 33.00点以上   -> 複勝率 70.05%
-    # B: 28.50点以上   -> 複勝率 40.04%
-    # C: 22.25点以上   -> 複勝率 20.32%
-    # D: 22.25点未満   -> 複勝率  5.72%
     if score >= 43.00:
         return "S"
     if score >= 33.00:
@@ -244,6 +238,55 @@ def classify_rank(score):
     if score >= 22.25:
         return "C"
     return "D"
+
+
+def assign_relative_ranks(group):
+    g = group.sort_values(["総合点", "horseNo"], ascending=[False, True]).copy()
+    n = len(g)
+    if n == 0:
+        g["ランク"] = ""
+        return g
+
+    # まず全馬をCで初期化
+    g["ランク"] = "C"
+
+    # D: 下位30%
+    d_count = max(1, round(n * 0.30)) if n >= 8 else max(1, round(n * 0.20))
+    # A: 上位15%
+    a_count = max(1, round(n * 0.15))
+    # B: 次の20%
+    b_count = max(1, round(n * 0.20))
+
+    # 上限調整
+    if a_count + b_count + d_count >= n:
+        overflow = a_count + b_count + d_count - (n - 1)
+        d_count = max(1, d_count - overflow)
+
+    # S: 1位かつ絶対点が一定以上の時のみ
+    top_score = g.iloc[0]["総合点"]
+    if pd.notna(top_score) and top_score >= 33.00:
+        g.iloc[0, g.columns.get_loc("ランク")] = "S"
+        a_start = 1
+    else:
+        # Sが出ない場合は1位をA候補へ
+        a_start = 0
+
+    # A
+    a_end = min(n - d_count, a_start + a_count)
+    if a_end > a_start:
+        g.iloc[a_start:a_end, g.columns.get_loc("ランク")] = "A"
+
+    # B
+    b_start = a_end
+    b_end = min(n - d_count, b_start + b_count)
+    if b_end > b_start:
+        g.iloc[b_start:b_end, g.columns.get_loc("ランク")] = "B"
+
+    # D
+    if d_count > 0:
+        g.iloc[n - d_count:n, g.columns.get_loc("ランク")] = "D"
+
+    return g
 
 def score_race_df(race_df, prepared_tables):
     out = race_df.copy()
@@ -258,16 +301,9 @@ def score_race_df(race_df, prepared_tables):
     out["総合点"] = sum(weighted_parts).round(2)
     out["順位"] = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].rank(method="min", ascending=False)
     out["順位"] = out["順位"].fillna(999).astype(int)
-    out["ランク"] = out["総合点"].apply(classify_rank)
-
-    # Sは各レース1頭まで
-    top_idx = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].idxmax()
-    out.loc[out["ランク"] == "S", "ランク"] = "A"
-    if len(top_idx) > 0:
-        top_mask = out.index.isin(top_idx)
-        out.loc[top_mask & (out["総合点"] >= 43.00), "ランク"] = "S"
-
     out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
+
+    out = out.groupby(["場所", "raceNo"], dropna=False, group_keys=False).apply(assign_relative_ranks)
     out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
     return out
 
@@ -324,8 +360,8 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
     html += '</div>'
     return html
 
-st.title("競馬ランクアプリ v9.0 4Factor")
-st.write("脚質×前走場所×種牡馬×母父馬 の4項目で内部採点し、表示はシンプルにしています。")
+st.title("競馬ランクアプリ v9.3 Relative Rank")
+st.write("4項目で内部採点し、表示ランクはレース内相対評価で見やすくしています。")
 
 with st.sidebar:
     st.subheader("出走馬CSV")
@@ -337,7 +373,7 @@ with st.sidebar:
     damsire_file = st.file_uploader("母父馬CSV", type=["csv"], key="damsire")
 
 st.caption("現在の比重：脚質37.5 / 前走場所22.5 / 種牡馬15 / 母父馬25")
-st.caption("ランク目安：S=95%級 / A=70%級 / B=40%級 / C=20%級 / D=それ未満。Sは各レース1頭まで。")
+st.caption("ランクはレース内順位ベースです。Sは各レース最大1頭、A〜Dは相対評価で振り分けます。")
 
 if race_file is None:
     st.info("まず出走馬CSVをアップロードしてください。")
