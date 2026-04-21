@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v9.3 Relative Rank", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v9.4 Dual Rank", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -240,6 +240,20 @@ def classify_rank(score):
     return "D"
 
 
+def classify_real_rank(score):
+    if pd.isna(score):
+        return ""
+    if score >= 43.00:
+        return "S"
+    if score >= 33.00:
+        return "A"
+    if score >= 28.50:
+        return "B"
+    if score >= 22.25:
+        return "C"
+    return "D"
+
+
 def assign_relative_ranks_df(df):
     out = df.copy()
     out["ランク"] = "C"
@@ -298,8 +312,10 @@ def score_race_df(race_df, prepared_tables):
     out["総合点"] = sum(weighted_parts).round(2)
     out["順位"] = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].rank(method="min", ascending=False)
     out["順位"] = out["順位"].fillna(999).astype(int)
+    out["リアル評価"] = out["総合点"].apply(classify_real_rank)
     out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
     out = assign_relative_ranks_df(out)
+    out = out.rename(columns={"ランク": "相対評価"})
     out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
     return out
 
@@ -328,7 +344,10 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
 .horse-top{display:flex;align-items:center;gap:6px;min-width:0}
 .horse-no{font-size:11px;color:#9fb0d3;font-weight:700;flex:0 0 auto}
 .horse-name{font-size:14px;font-weight:800;color:#ffffff;line-height:1.15;word-break:break-all}
-.rank-pill{min-width:44px;text-align:center;font-size:18px;font-weight:900;border-radius:12px;padding:7px 12px;flex:0 0 auto;border:2px solid #334a76;color:#edf3ff;background:rgba(93,122,183,.12)}
+.pill-area{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+.rank-box{display:flex;flex-direction:column;align-items:center;gap:3px}
+.rank-label{font-size:9px;color:#9fb0d3;line-height:1}
+.rank-pill{min-width:36px;text-align:center;font-size:16px;font-weight:900;border-radius:10px;padding:6px 10px;flex:0 0 auto;border:2px solid #334a76;color:#edf3ff;background:rgba(93,122,183,.12)}
 .rank-S{border-color:#e7c65b;color:#fff2ba;background:rgba(231,198,91,.15);box-shadow:inset 0 0 0 1px rgba(231,198,91,.25)}
 .rank-A{border-color:#c9d6ef;color:#ffffff;background:rgba(201,214,239,.10)}
 .rank-B{border-color:#d9b456;color:#ffe6a3;background:rgba(217,180,86,.12)}
@@ -342,22 +361,28 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
     for _, row in card_df.iterrows():
         horse_no = str(row.get("馬番", "")).strip()
         horse_name = str(row.get("馬名", "")).strip()
-        rank = str(row.get("ランク", "")).strip()
-        rank_cls = f"rank-{rank}" if rank in {"S", "A", "B", "C", "D"} else "rank-D"
+        rel_rank = str(row.get("相対評価", "")).strip()
+        real_rank = str(row.get("リアル評価", "")).strip()
+        rel_cls = f"rank-{rel_rank}" if rel_rank in {"S", "A", "B", "C", "D"} else "rank-D"
+        real_cls = f"rank-{real_rank}" if real_rank in {"S", "A", "B", "C", "D"} else "rank-D"
         html += (
             f'<div class="horse-card">'
             f'<div class="horse-left"><div class="horse-top">'
             f'<div class="horse-no">{horse_no}</div>'
             f'<div class="horse-name">{horse_name}</div>'
             f'</div></div>'
-            f'<div class="rank-pill {rank_cls}">{rank}</div>'
+            f'<div class="pill-area">'
+            f'<div class="rank-box"><div class="rank-label">相対</div><div class="rank-pill {rel_cls}">{rel_rank}</div></div>'
+            f'<div class="rank-box"><div class="rank-label">実力</div><div class="rank-pill {real_cls}">{real_rank}</div></div>'
+            f'</div>'
             f'</div>'
         )
     html += '</div>'
     return html
 
-st.title("競馬ランクアプリ v9.3 Relative Rank")
-st.write("4項目で内部採点し、表示ランクはレース内相対評価で見やすくしています。")
+
+st.title("競馬ランクアプリ v9.4 Dual Rank")
+st.write("レース内の相対評価に加えて、内部点数ベースのリアル評価も並べて表示します。")
 
 with st.sidebar:
     st.subheader("出走馬CSV")
@@ -369,7 +394,7 @@ with st.sidebar:
     damsire_file = st.file_uploader("母父馬CSV", type=["csv"], key="damsire")
 
 st.caption("現在の比重：脚質37.5 / 前走場所22.5 / 種牡馬15 / 母父馬25")
-st.caption("ランクはレース内順位ベースです。Sは各レース最大1頭、A〜Dは相対評価で振り分けます。")
+st.caption("左が相対評価、右がリアル評価です。相対評価はレース内順位、リアル評価は内部点数帯をそのまま表示します。")
 
 if race_file is None:
     st.info("まず出走馬CSVをアップロードしてください。")
@@ -388,12 +413,14 @@ try:
 
     result_df = score_race_df(race_df, loaded)
 
-    export_df = result_df[["date", "レース", "raceName", "horseNo", "horseName", "ランク"]].copy()
+    export_df = result_df[["date", "レース", "raceName", "horseNo", "horseName", "相対評価", "リアル評価"]].copy()
     export_df = export_df.rename(columns={
         "date": "日付",
         "raceName": "レース名",
         "horseNo": "馬番",
         "horseName": "馬名",
+        "相対評価": "相対",
+        "リアル評価": "実力",
     })
 
     st.success("自動採点が完了しました。")
@@ -402,7 +429,7 @@ try:
     with tab1:
         grouped = result_df.groupby(["date", "レース", "raceName", "距離表示"], dropna=False, sort=False)
         for (date_val, race_val, race_name_val, dist_val), g in grouped:
-            show_df = g[["horseNo", "horseName", "ランク"]].copy().rename(columns={"horseNo": "馬番", "horseName": "馬名"})
+            show_df = g[["horseNo", "horseName", "相対評価", "リアル評価"]].copy().rename(columns={"horseNo": "馬番", "horseName": "馬名"})
             st.markdown(render_rank_cards(date_val, race_val, race_name_val, dist_val, show_df), unsafe_allow_html=True)
 
     with tab2:
@@ -413,7 +440,7 @@ try:
     st.download_button(
         label="予想結果CSVをダウンロード",
         data=csv_data,
-        file_name="4factor_rank_predictions.csv",
+        file_name="4factor_dual_rank_predictions.csv",
         mime="text/csv",
     )
 
