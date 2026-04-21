@@ -335,11 +335,14 @@ try:
     result_df["信頼度"] = result_df["総合点"].apply(classify_score)
 
     # 表示と出力は最小限に整理
+    if "date" not in result_df.columns:
+        result_df["date"] = ""
     result_df["レース"] = result_df["場所"].astype(str) + result_df["raceNo"].astype(str) + "R"
     simple_cols = ["date", "レース", "raceName", "horseName", "信頼度"]
     for c in simple_cols:
         if c not in result_df.columns:
             result_df[c] = ""
+    result_df["date"] = result_df["date"].fillna("").astype(str)
     export_df = result_df[simple_cols].copy()
     export_df = export_df.rename(columns={
         "date": "日付",
@@ -357,6 +360,8 @@ try:
         st.dataframe(export_df, use_container_width=True, height=700)
     with tab2:
         st.write("出走馬CSV")
+        if "date" not in race_df_raw.columns:
+            race_df_raw["date"] = ""
         st.dataframe(race_df_raw, use_container_width=True)
 
     csv_data = export_df.to_csv(index=False).encode("utf-8-sig")
