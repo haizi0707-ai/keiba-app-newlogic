@@ -303,7 +303,7 @@ def score_race_df(race_df, prepared_tables):
     out["順位"] = out["順位"].fillna(999).astype(int)
     out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
 
-    out = out.groupby(["場所", "raceNo"], dropna=False, group_keys=False).apply(assign_relative_ranks)
+    out = out.groupby(["場所", "raceNo"], dropna=False, group_keys=False).apply(assign_relative_ranks).reset_index(drop=True)
     out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
     return out
 
