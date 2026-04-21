@@ -240,53 +240,50 @@ def classify_rank(score):
     return "D"
 
 
-def assign_relative_ranks(group):
-    g = group.sort_values(["総合点", "horseNo"], ascending=[False, True]).copy()
-    n = len(g)
-    if n == 0:
-        g["ランク"] = ""
-        return g
+def assign_relative_ranks_df(df):
+    out = df.copy()
+    out["ランク"] = "C"
 
-    # まず全馬をCで初期化
-    g["ランク"] = "C"
+    keys = out[["場所", "raceNo"]].drop_duplicates().itertuples(index=False, name=None)
+    for place_val, race_no_val in keys:
+        mask = (out["場所"] == place_val) & (out["raceNo"] == race_no_val)
+        idx = out.loc[mask].sort_values(["総合点", "horseNo"], ascending=[False, True]).index.tolist()
+        n = len(idx)
+        if n == 0:
+            continue
 
-    # D: 下位30%
-    d_count = max(1, round(n * 0.30)) if n >= 8 else max(1, round(n * 0.20))
-    # A: 上位15%
-    a_count = max(1, round(n * 0.15))
-    # B: 次の20%
-    b_count = max(1, round(n * 0.20))
+        d_count = max(1, round(n * 0.30)) if n >= 8 else max(1, round(n * 0.20))
+        a_count = max(1, round(n * 0.15))
+        b_count = max(1, round(n * 0.20))
 
-    # 上限調整
-    if a_count + b_count + d_count >= n:
-        overflow = a_count + b_count + d_count - (n - 1)
-        d_count = max(1, d_count - overflow)
+        if a_count + b_count + d_count >= n:
+            d_count = max(1, n - a_count - b_count - 1)
 
-    # S: 1位かつ絶対点が一定以上の時のみ
-    top_score = g.iloc[0]["総合点"]
-    if pd.notna(top_score) and top_score >= 33.00:
-        g.iloc[0, g.columns.get_loc("ランク")] = "S"
-        a_start = 1
-    else:
-        # Sが出ない場合は1位をA候補へ
-        a_start = 0
+        # default all C
+        out.loc[idx, "ランク"] = "C"
 
-    # A
-    a_end = min(n - d_count, a_start + a_count)
-    if a_end > a_start:
-        g.iloc[a_start:a_end, g.columns.get_loc("ランク")] = "A"
+        # S is top only if enough score
+        top_idx = idx[0]
+        top_score = out.at[top_idx, "総合点"]
+        cursor = 0
+        if pd.notna(top_score) and top_score >= 33.00:
+            out.at[top_idx, "ランク"] = "S"
+            cursor = 1
 
-    # B
-    b_start = a_end
-    b_end = min(n - d_count, b_start + b_count)
-    if b_end > b_start:
-        g.iloc[b_start:b_end, g.columns.get_loc("ランク")] = "B"
+        # A
+        for i in idx[cursor: min(n - d_count, cursor + a_count)]:
+            out.at[i, "ランク"] = "A"
+        cursor = min(n - d_count, cursor + a_count)
 
-    # D
-    if d_count > 0:
-        g.iloc[n - d_count:n, g.columns.get_loc("ランク")] = "D"
+        # B
+        for i in idx[cursor: min(n - d_count, cursor + b_count)]:
+            out.at[i, "ランク"] = "B"
 
-    return g
+        # D
+        for i in idx[max(0, n - d_count):]:
+            out.at[i, "ランク"] = "D"
+
+    return out
 
 def score_race_df(race_df, prepared_tables):
     out = race_df.copy()
@@ -302,8 +299,7 @@ def score_race_df(race_df, prepared_tables):
     out["順位"] = out.groupby(["場所", "raceNo"], dropna=False)["総合点"].rank(method="min", ascending=False)
     out["順位"] = out["順位"].fillna(999).astype(int)
     out["レース"] = out["場所"].astype(str) + out["raceNo"].astype(str) + "R"
-
-    out = out.groupby(["場所", "raceNo"], dropna=False, group_keys=False).apply(assign_relative_ranks).reset_index(drop=True)
+    out = assign_relative_ranks_df(out)
     out = out.sort_values(["場所", "raceNo", "順位", "horseNo"], ascending=[True, True, True, True])
     return out
 
