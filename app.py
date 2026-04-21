@@ -229,6 +229,9 @@ def lookup_component(row, table_df, fallback_df, kind):
 def classify_rank(score):
     if pd.isna(score):
         return ""
+    # 4項目版の3年分検証に合わせたランク帯
+    # S: 複勝率 81%以上帯
+    # A: 複勝率 70%以上 81%未満帯
     if score >= 40:
         return "S"
     if score >= 34:
@@ -331,7 +334,7 @@ with st.sidebar:
     damsire_file = st.file_uploader("母父馬CSV", type=["csv"], key="damsire")
 
 st.caption("現在の比重：脚質37.5 / 前走場所22.5 / 種牡馬15 / 母父馬25")
-st.caption("A以上で約1割を狙う4項目版です。Sは各レース1頭まで。")
+st.caption("ランク目安：S=複勝率81%以上帯 / A=複勝率70%以上81%未満帯。Sは各レース1頭まで。")
 
 if race_file is None:
     st.info("まず出走馬CSVをアップロードしてください。")
