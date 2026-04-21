@@ -135,7 +135,11 @@ def rename_first_match(df, candidates_map):
 
 def prepare_race_df(df):
     df = rename_first_match(df, RACE_COLUMN_CANDIDATES)
-    for col in ["場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire", "distance", "going", "style", "prevTrack", "winStyle", "comment"]:
+
+    # v8.1入力CSVは「芝ダ」「距離」を別列で持つ前提。
+    # 旧形式の distance=芝1200 / ダ1800 にも対応する。
+    for col in ["場所", "raceNo", "raceName", "horseNo", "horseName", "jockey", "trainer", "sire",
+                "distance", "芝ダ", "距離", "going", "style", "prevTrack", "winStyle", "comment"]:
         if col not in df.columns:
             df[col] = ""
 
@@ -148,9 +152,22 @@ def prepare_race_df(df):
     df["winStyle"] = df["winStyle"].apply(norm_winstyle)
     df["going"] = df["going"].apply(norm_text)
 
+    # まずは別列の芝ダ / 距離を優先
+    df["芝ダ"] = df["芝ダ"].apply(norm_surface)
+    df["距離"] = pd.to_numeric(df["距離"], errors="coerce")
+
+    # 別列が空欄のときだけ旧形式distance列から補完
     parsed = df["distance"].apply(parse_distance_field)
-    df["芝ダ"] = parsed.apply(lambda x: x[0])
-    df["距離"] = parsed.apply(lambda x: x[1])
+    parsed_surface = parsed.apply(lambda x: x[0])
+    parsed_dist = parsed.apply(lambda x: x[1])
+
+    df["芝ダ"] = np.where(
+        df["芝ダ"].astype(str).str.strip() != "",
+        df["芝ダ"],
+        parsed_surface
+    )
+    df["距離"] = df["距離"].where(df["距離"].notna(), parsed_dist)
+
     return df
 
 
