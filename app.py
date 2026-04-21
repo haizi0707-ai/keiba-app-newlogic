@@ -302,8 +302,141 @@ def classify_score(score):
     return "D"
 
 
-st.title("競馬ランクアプリ v8.4 Rank View")
-st.write("内部で自動採点し、表示は日付・レース・レース名・馬名・ランクだけに絞っています。")
+def render_rank_cards(date_val, race_val, race_name_val, dist_text, field_size_val, card_df):
+    title_parts = []
+    if str(date_val).strip():
+        title_parts.append(str(date_val).strip())
+    if str(race_val).strip():
+        title_parts.append(str(race_val).strip())
+    title = " ".join(title_parts).strip()
+    subtitle_parts = []
+    if str(race_name_val).strip():
+        subtitle_parts.append(str(race_name_val).strip())
+    if str(dist_text).strip():
+        subtitle_parts.append(str(dist_text).strip())
+    if str(field_size_val).strip():
+        subtitle_parts.append(f"{field_size_val}頭")
+    subtitle = " / ".join(subtitle_parts)
+
+    html = """
+    <style>
+      .kv-wrap{
+        background: linear-gradient(180deg,#071225 0%, #0b1730 100%);
+        border-radius: 22px;
+        padding: 18px 14px 18px 14px;
+        color: #f5f7fb;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+        margin: 10px 0 18px 0;
+      }
+      .kv-title{
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1.2;
+        margin: 0 0 6px 0;
+        letter-spacing: 0.2px;
+      }
+      .kv-subtitle{
+        font-size: 13px;
+        color: #c8d2e8;
+        margin: 0 0 14px 0;
+      }
+      .horse-card{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap: 10px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.04);
+        border-radius: 16px;
+        padding: 11px 12px;
+        margin: 8px 0;
+      }
+      .horse-left{
+        min-width:0;
+        flex:1;
+      }
+      .horse-top{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        min-width:0;
+      }
+      .horse-no{
+        font-size: 12px;
+        color: #9fb0d3;
+        font-weight: 700;
+        flex: 0 0 auto;
+      }
+      .horse-name{
+        font-size: 17px;
+        font-weight: 800;
+        color: #ffffff;
+        line-height:1.2;
+        word-break: break-all;
+      }
+      .rank-pill{
+        min-width: 56px;
+        text-align:center;
+        font-size: 22px;
+        font-weight: 900;
+        border-radius: 14px;
+        padding: 9px 18px;
+        flex: 0 0 auto;
+        border: 2px solid #334a76;
+        color: #edf3ff;
+        background: rgba(93,122,183,0.12);
+      }
+      .rank-S{
+        border-color:#e7c65b;
+        color:#fff2ba;
+        background: rgba(231,198,91,0.15);
+        box-shadow: inset 0 0 0 1px rgba(231,198,91,0.25);
+      }
+      .rank-A{
+        border-color:#c9d6ef;
+        color:#ffffff;
+        background: rgba(201,214,239,0.10);
+      }
+      .rank-B{
+        border-color:#d9b456;
+        color:#ffe6a3;
+        background: rgba(217,180,86,0.12);
+      }
+      .rank-C{
+        border-color:#3e547e;
+        color:#d7e3ff;
+        background: rgba(93,122,183,0.08);
+      }
+      .rank-D{
+        border-color:#30405f;
+        color:#b8c6e3;
+        background: rgba(70,89,127,0.06);
+      }
+    </style>
+    """
+    html += f'<div class="kv-wrap"><div class="kv-title">{title}</div><div class="kv-subtitle">{subtitle}</div>'
+    for _, row in card_df.iterrows():
+        horse_no = str(row.get("馬番","")).strip()
+        horse_name = str(row.get("馬名","")).strip()
+        rank = str(row.get("ランク","")).strip()
+        rank_cls = f"rank-{rank}" if rank in {"S","A","B","C","D"} else "rank-D"
+        html += f"""
+        <div class="horse-card">
+          <div class="horse-left">
+            <div class="horse-top">
+              <div class="horse-no">{horse_no}</div>
+              <div class="horse-name">{horse_name}</div>
+            </div>
+          </div>
+          <div class="rank-pill {rank_cls}">{rank}</div>
+        </div>
+        """
+    html += "</div>"
+    return html
+
+
+st.title("競馬ランクアプリ v8.5 Card View")
+st.write("内部で自動採点し、スマホで見やすいカード形式で表示します。")
 
 with st.sidebar:
     st.subheader("入力ファイル")
@@ -335,38 +468,59 @@ try:
     # 表示と出力は最小限に整理
     if "date" not in result_df.columns:
         result_df["date"] = ""
+    result_df["raceNo"] = result_df["raceNo"].fillna("").astype(str).str.strip()
+    result_df["horseNo"] = result_df["horseNo"].fillna("").astype(str).str.strip()
     result_df["レース"] = result_df["場所"].astype(str) + result_df["raceNo"].astype(str) + "R"
-    simple_cols = ["date", "レース", "raceName", "horseName", "信頼度"]
+    simple_cols = ["date", "レース", "raceName", "distance", "going", "fieldSize", "horseNo", "horseName", "信頼度"]
     for c in simple_cols:
         if c not in result_df.columns:
             result_df[c] = ""
     result_df["date"] = result_df["date"].fillna("").astype(str)
+    result_df["raceName"] = result_df["raceName"].fillna("").astype(str)
+    result_df["distance"] = result_df["distance"].fillna("").astype(str)
+    result_df["going"] = result_df["going"].fillna("").astype(str)
+    result_df["fieldSize"] = result_df["fieldSize"].fillna("").astype(str)
+    result_df["horseNo"] = result_df["horseNo"].fillna("").astype(str)
+    result_df["horseName"] = result_df["horseName"].fillna("").astype(str)
+    result_df["信頼度"] = result_df["信頼度"].fillna("").astype(str)
+
     export_df = result_df[simple_cols].copy()
     export_df = export_df.rename(columns={
         "date": "日付",
         "raceName": "レース名",
+        "distance": "距離",
+        "going": "馬場",
+        "fieldSize": "頭数",
+        "horseNo": "馬番",
         "horseName": "馬名",
         "信頼度": "ランク",
     })
 
     st.success("自動採点が完了しました。")
     st.caption("現在の比重：脚質35 / 勝ち方25 / 前走場所20 / 調教師12 / 血統8")
-    st.caption("表示は簡潔化し、ランクは S〜D のみ表示しています。")
 
     tab1, tab2 = st.tabs(["予想結果", "元データ確認"])
     with tab1:
-        st.dataframe(export_df, use_container_width=True, height=700)
+        grouped = export_df.groupby(["日付", "レース", "レース名", "距離", "馬場", "頭数"], dropna=False, sort=False)
+        for (date_val, race_val, race_name_val, dist_val, going_val, field_size_val), g in grouped:
+            dist_text = ""
+            if str(dist_val).strip() and str(going_val).strip():
+                dist_text = f"{going_val}{dist_val}"
+            elif str(dist_val).strip():
+                dist_text = str(dist_val).strip()
+            show_df = g[["馬番", "馬名", "ランク"]].reset_index(drop=True)
+            st.markdown(render_rank_cards(date_val, race_val, race_name_val, dist_text, field_size_val, show_df), unsafe_allow_html=True)
     with tab2:
         st.write("出走馬CSV")
         if "date" not in race_df_raw.columns:
             race_df_raw["date"] = ""
-        st.dataframe(race_df_raw, use_container_width=True)
+        st.dataframe(race_df_raw, use_container_width=True, hide_index=True)
 
-    csv_data = export_df.to_csv(index=False).encode("utf-8-sig")
+    csv_data = export_df[["日付", "レース", "レース名", "馬番", "馬名", "ランク"]].to_csv(index=False).encode("utf-8-sig")
     st.download_button(
         label="予想結果CSVをダウンロード",
         data=csv_data,
-        file_name="rank_view_predictions.csv",
+        file_name="rank_card_predictions.csv",
         mime="text/csv",
     )
 
