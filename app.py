@@ -1,11 +1,13 @@
+
 import os
 import re
 import unicodedata
+import itertools
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v9.6 分布ランク", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v9.7 Bet Advisor", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -34,6 +36,53 @@ RACE_COLUMN_CANDIDATES = {
     "damsire": ["damSire","母父馬"],
     "raceLabel": ["レース","race"],
 }
+
+# ---- historical ROI summaries embedded from prior 3-year calculations ----
+relative_returns = pd.DataFrame([
+    ["S",3417,31.34,78.58,247.12,220.97],
+    ["A",6672,17.15,50.54,160.53,158.72],
+    ["B",9120,7.71,25.39,81.78,87.02],
+    ["C",13116,3.16,11.51,32.78,43.51],
+    ["D",13647,0.76,3.08,14.89,14.53],
+], columns=["ランク","頭数","単勝率","複勝率","単回率","複回率"])
+
+real_returns = pd.DataFrame([
+    ["S",2360,33.18,85.21,250.98,240.76],
+    ["A",6881,19.27,54.82,177.54,167.76],
+    ["B",11457,7.82,25.32,83.60,87.78],
+    ["C",13818,2.71,9.91,30.62,38.48],
+    ["D",11456,0.49,2.18,8.70,10.19],
+], columns=["ランク","頭数","単勝率","複勝率","単回率","複回率"])
+
+combo_returns = pd.DataFrame([
+    ["S×S",1852,35.48,86.99,269.15,245.01],
+    ["S×A",2139,25.30,78.92,188.43,225.24],
+    ["A×S",498,25.30,78.92,188.43,225.24],
+    ["A×A",4201,18.85,54.13,178.77,167.65],
+    ["B×A",1153,11.54,38.68,121.90,133.53],
+    ["B×B",6709,7.63,24.43,82.53,83.77],
+], columns=["組み合わせ","頭数","単勝率","複勝率","単回率","複回率"])
+
+quinella_returns = pd.DataFrame([
+    ["実力 S×S",592,153,1003.55],
+    ["実力 S×A",3932,577,604.04],
+    ["実力 A×A",5806,486,375.78],
+    ["相対 S×A",6672,1035,631.74],
+    ["相対 A×A",3489,215,318.97],
+    ["複合 SA×AA",1860,242,520.49],
+    ["複合 AA×AA",1499,120,364.47],
+], columns=["買い方","点数","的中数","馬連回収率"])
+
+trio_returns = pd.DataFrame([
+    ["実力 S×S×S",122,17,4494.84],
+    ["実力 S×S×A",1204,78,1162.89],
+    ["実力 S×A×A",4076,180,836.25],
+    ["実力 S×A×B",13962,284,421.48],
+    ["相対 S×A×A",3390,332,1846.27],
+    ["相対 S×A×B",17811,585,692.46],
+    ["相対 A×A×B",10055,75,203.06],
+], columns=["買い方","点数","的中数","三連複回収率"])
+
 
 def read_csv_any(file_obj_or_path):
     encodings = ["utf-8-sig", "cp932", "shift_jis", "utf-8"]
@@ -218,6 +267,11 @@ def assign_relative_ranks_df(df):
             out.at[i, "相対評価"] = "D"
     return out
 
+def pill_class(v):
+    if v in {"S","A","B","C","D"}:
+        return f"rank-{v}"
+    return "rank-D"
+
 def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
     title = " ".join([x for x in [str(date_val).strip(), str(race_val).strip()] if x]) or str(race_val).strip() or "レース"
     subtitle = " / ".join([x for x in [str(race_name_val).strip(), str(dist_text).strip()] if x])
@@ -240,6 +294,11 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
 .rank-B{border-color:#d9b456;color:#ffe6a3;background:rgba(217,180,86,.12)}
 .rank-C{border-color:#3e547e;color:#d7e3ff;background:rgba(93,122,183,.08)}
 .rank-D{border-color:#30405f;color:#b8c6e3;background:rgba(70,89,127,.06)}
+.rec-wrap{background:#0f1525;border:1px solid #1d2945;border-radius:16px;padding:12px 12px;margin:10px 0 14px 0;color:#eef3ff}
+.rec-title{font-size:15px;font-weight:800;margin:0 0 8px 0}
+.rec-sub{font-size:11px;color:#b8c6e3;margin:0 0 8px 0}
+.rec-line{font-size:12px;line-height:1.5;margin:3px 0}
+.small-table td,.small-table th{font-size:12px!important}
 </style>
 """
     html = css + f'<div class="kv-wrap"><div class="kv-title">{title}</div>'
@@ -248,8 +307,8 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
     for _, row in card_df.iterrows():
         rel_rank = str(row.get("相対","")).strip()
         real_rank = str(row.get("実力","")).strip()
-        rel_cls = f"rank-{rel_rank}" if rel_rank in {"S","A","B","C","D"} else "rank-D"
-        real_cls = f"rank-{real_rank}" if real_rank in {"S","A","B","C","D"} else "rank-D"
+        rel_cls = pill_class(rel_rank)
+        real_cls = pill_class(real_rank)
         html += (
             f'<div class="horse-card"><div class="horse-left"><div class="horse-top">'
             f'<div class="horse-no">{str(row.get("馬番","")).strip()}</div>'
@@ -263,8 +322,93 @@ def render_rank_cards(date_val, race_val, race_name_val, dist_text, card_df):
     html += "</div>"
     return html
 
-st.title("競馬ランクアプリ v9.6 分布ランク")
-st.write("4項目で内部採点し、相対評価と、同条件の過去3年分布に対する実力評価を並べて表示します。")
+def horse_list_text(df):
+    if df.empty:
+        return "なし"
+    return " / ".join([f"{r['horseNo']} {r['horseName']}" for _, r in df.iterrows()])
+
+def pair_text(df1, df2=None, same_group=False):
+    pairs = []
+    if same_group:
+        rows = list(df1[["horseNo","horseName"]].itertuples(index=False, name=None))
+        for a, b in itertools.combinations(rows, 2):
+            pairs.append(f"{a[0]}-{b[0]} ({a[1]} / {b[1]})")
+    else:
+        if df2 is None:
+            return "なし"
+        rows1 = list(df1[["horseNo","horseName"]].itertuples(index=False, name=None))
+        rows2 = list(df2[["horseNo","horseName"]].itertuples(index=False, name=None))
+        used = set()
+        for a in rows1:
+            for b in rows2:
+                if a[0] == b[0]:
+                    continue
+                key = tuple(sorted([str(a[0]), str(b[0])]))
+                if key in used:
+                    continue
+                used.add(key)
+                pairs.append(f"{key[0]}-{key[1]}")
+    return " / ".join(pairs[:30]) if pairs else "なし"
+
+def trio_text(groups):
+    vals = []
+    seen = set()
+    lists = [list(g[["horseNo","horseName"]].itertuples(index=False, name=None)) for g in groups]
+    for a in lists[0]:
+        for b in lists[1]:
+            for c in lists[2]:
+                nums = [str(a[0]), str(b[0]), str(c[0])]
+                if len(set(nums)) < 3:
+                    continue
+                key = tuple(sorted(nums))
+                if key in seen:
+                    continue
+                seen.add(key)
+                vals.append("-".join(key))
+    return " / ".join(vals[:40]) if vals else "なし"
+
+def composite_label(rel, real):
+    return f"{rel}{real}"
+
+def build_recommendations(g):
+    g = g.sort_values(["順位","horseNo"], ascending=[True, True]).copy()
+    rel_s = g[g["相対評価"]=="S"]
+    rel_a = g[g["相対評価"]=="A"]
+    rel_b = g[g["相対評価"]=="B"]
+    real_s = g[g["実力評価"]=="S"]
+    real_a = g[g["実力評価"]=="A"]
+    real_b = g[g["実力評価"]=="B"]
+
+    g["複合"] = [composite_label(r, t) for r, t in zip(g["相対評価"], g["実力評価"])]
+    ss = g[g["複合"]=="SS"]
+    sa = g[g["複合"]=="SA"]
+    aa = g[g["複合"]=="AA"]
+
+    lines = []
+    lines.append(("単複おすすめ①", f"相対S×実力S/A", horse_list_text(g[(g['相対評価']=='S') & (g['実力評価'].isin(['S','A']))]), "複回率 225〜245%帯"))
+    lines.append(("単複おすすめ②", f"相対A×実力A以上", horse_list_text(g[(g['相対評価']=='A') & (g['実力評価'].isin(['S','A']))]), "複回率 167%級"))
+
+    lines.append(("馬連おすすめ①", "相対 S×A", pair_text(rel_s, rel_a), "馬連回収率 631.74%"))
+    lines.append(("馬連おすすめ②", "実力 S×A", pair_text(real_s, real_a), "馬連回収率 604.04%"))
+    lines.append(("馬連おすすめ③", "実力 S×S", pair_text(real_s, same_group=True), "馬連回収率 1003.55%"))
+    lines.append(("馬連おすすめ④", "複合 SA×AA", pair_text(sa, aa), "馬連回収率 520.49%"))
+
+    lines.append(("三連複おすすめ①", "相対 S×A×A", trio_text([rel_s, rel_a, rel_a]), "三連複回収率 1846.27%"))
+    lines.append(("三連複おすすめ②", "実力 S×S×A", trio_text([real_s, real_s, real_a]), "三連複回収率 1162.89%"))
+    lines.append(("三連複おすすめ③", "実力 S×A×A", trio_text([real_s, real_a, real_a]), "三連複回収率 836.25%"))
+    lines.append(("三連複おすすめ④", "相対 S×A×B", trio_text([rel_s, rel_a, rel_b]), "三連複回収率 692.46%"))
+    return lines
+
+def load_default_or_upload(key, uploader):
+    if uploader is not None:
+        return read_csv_any(uploader)
+    path = DEFAULT_FILES[key]
+    if os.path.exists(path):
+        return read_csv_any(path)
+    return None
+
+st.title("競馬ランクアプリ v9.7 Bet Advisor")
+st.write("4項目で内部採点し、相対評価・実力評価に加えて、3年分の回収率集計をもとに買い目候補を表示します。")
 
 with st.sidebar:
     race_file = st.file_uploader("出走馬CSV", type=["csv"], key="race")
@@ -275,19 +419,11 @@ with st.sidebar:
     bench_file = st.file_uploader("分布ランク基準CSV", type=["csv"], key="bench")
 
 st.caption("比重：脚質37.5 / 前走場所22.5 / 種牡馬15 / 母父馬25")
-st.caption("左が相対評価、右が実力評価です。実力評価は競馬場×芝ダ×距離ごとの過去3年分布ランクです。")
+st.caption("履歴サマリー：相対・実力・複合の単複回収率、馬連回収率、三連複回収率を表示。")
 
 if race_file is None:
     st.info("まず出走馬CSVをアップロードしてください。")
     st.stop()
-
-def load_default_or_upload(key, uploader):
-    if uploader is not None:
-        return read_csv_any(uploader)
-    path = DEFAULT_FILES[key]
-    if os.path.exists(path):
-        return read_csv_any(path)
-    return None
 
 try:
     race_df_raw = read_csv_any(race_file)
@@ -336,16 +472,41 @@ try:
     export_df = export_df.rename(columns={"date":"日付","raceName":"レース名","horseNo":"馬番","horseName":"馬名","相対評価":"相対","実力評価":"実力"})
 
     st.success("自動採点が完了しました。")
-    tab1, tab2 = st.tabs(["予想結果","元データ確認"])
+
+    tab1, tab2, tab3 = st.tabs(["予想結果","おすすめ買い目","回収率サマリー"])
+
     with tab1:
         grouped = result_df.groupby(["date","レース","raceName","距離表示"], dropna=False, sort=False)
         for (date_val, race_val, race_name_val, dist_val), g in grouped:
             show_df = g[["horseNo","horseName","相対評価","実力評価"]].copy().rename(columns={"horseNo":"馬番","horseName":"馬名","相対評価":"相対","実力評価":"実力"})
             st.markdown(render_rank_cards(date_val, race_val, race_name_val, dist_val, show_df), unsafe_allow_html=True)
+
     with tab2:
-        st.dataframe(race_df_raw, use_container_width=True, hide_index=True)
+        grouped = result_df.groupby(["date","レース","raceName","距離表示"], dropna=False, sort=False)
+        for (date_val, race_val, race_name_val, dist_val), g in grouped:
+            st.markdown(f"### {date_val} {race_val} {race_name_val} {dist_val}")
+            recs = build_recommendations(g)
+            for title, rule, body, stat in recs:
+                st.markdown(f"**{title}**")
+                st.write(f"条件: {rule}")
+                st.write(f"候補: {body}")
+                st.caption(stat)
+            st.divider()
+
+    with tab3:
+        st.markdown("### 相対ランク別 単複回収率")
+        st.dataframe(relative_returns, use_container_width=True, hide_index=True)
+        st.markdown("### 実力ランク別 単複回収率")
+        st.dataframe(real_returns, use_container_width=True, hide_index=True)
+        st.markdown("### 複合ランク別 単複回収率（主要）")
+        st.dataframe(combo_returns, use_container_width=True, hide_index=True)
+        st.markdown("### 馬連回収率（主要）")
+        st.dataframe(quinella_returns, use_container_width=True, hide_index=True)
+        st.markdown("### 三連複回収率（主要）")
+        st.dataframe(trio_returns, use_container_width=True, hide_index=True)
 
     csv_data = export_df.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("予想結果CSVをダウンロード", data=csv_data, file_name="4factor_distribution_rank_predictions.csv", mime="text/csv")
+    st.download_button("予想結果CSVをダウンロード", data=csv_data, file_name="bet_advisor_predictions.csv", mime="text/csv")
+
 except Exception as e:
     st.error(f"エラー: {e}")
