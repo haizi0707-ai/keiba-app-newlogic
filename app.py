@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v9.8 Bet Update", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v9.9 Composite Flow", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -76,8 +76,8 @@ combo_returns = pd.DataFrame([
 
 recommended_bets = pd.DataFrame([
     ["単複おすすめ1", "相対S × 実力S/A の最上位馬", "複勝信頼度 78.92〜86.99%", ""],
-    ["馬連おすすめ1", "相対S → 相対Aの最上位1頭", "的中率 19.72%", "馬連回収率 781.17%"],
-    ["三連複おすすめ1", "上位2頭軸 → 3,4,5位へ3点", "レース的中率 32.95%", "三連複回収率 1558.12%"],
+    ["馬連おすすめ1", "複合軸 → 相手3頭", "レース的中率 52.85%（全体）", "馬連回収率 1384.53%（全体）"],
+    ["三連複おすすめ1", "複合軸 → 相手3頭流し", "過去3年ベースで検証用運用", "複合条件で試験運用"],
 ], columns=["券種","買い方","信頼度","回収率"])
 
 
@@ -356,32 +356,36 @@ def recommend_single(g):
     return horse_text(r), "相対S × 実力S/A", f"複勝信頼度 {conf}"
 
 def recommend_quinella(g):
-    s = g[g["相対評価"]=="S"].sort_values(["順位","horseNo"]).head(1)
-    a = g[g["相対評価"]=="A"].sort_values(["順位","horseNo"]).head(1)
-    if s.empty or a.empty:
-        top2 = g.sort_values(["順位","horseNo"]).head(2)
-        if len(top2) < 2:
-            return "なし", "候補不足", "信頼度 - / 回収率 -"
-        return f"{top2.iloc[0]['horseNo']}-{top2.iloc[1]['horseNo']} ({top2.iloc[0]['horseName']} / {top2.iloc[1]['horseName']})", "上位2頭", "信頼度 参考 / 回収率 参考"
-    srow = s.iloc[0]
-    arow = a.iloc[0]
-    ticket = f"{srow['horseNo']}-{arow['horseNo']} ({srow['horseName']} / {arow['horseName']})"
-    return ticket, "相対S → 相対A最上位1頭", "信頼度 19.72% / 馬連回収率 781.17%"
+    base = g[(g["相対評価"]=="S") & (g["実力評価"].isin(["S","A"]))].sort_values(["順位","horseNo"]).head(1)
+    opponents = g[(g["実力評価"].isin(["S","A"])) & (g["horseNo"].astype(str) != (base.iloc[0]["horseNo"] if not base.empty else ""))].sort_values(["順位","horseNo"]).head(3)
+    if base.empty:
+        base = g.sort_values(["順位","horseNo"]).head(1)
+    if opponents.empty:
+        opponents = g[g["horseNo"].astype(str) != str(base.iloc[0]["horseNo"])].sort_values(["順位","horseNo"]).head(3)
+    if base.empty or opponents.empty:
+        return "なし", "候補不足", "信頼度 - / 回収率 -"
+    brow = base.iloc[0]
+    body = " / ".join([f"{brow['horseNo']}-{r['horseNo']} ({brow['horseName']} / {r['horseName']})" for _, r in opponents.iterrows()])
+    return body, "複合軸（相対S×実力A以上）→ 相手3頭", "レース的中率 52.85% / 馬連回収率 1384.53%"
 
 def recommend_trio(g):
-    top = g.sort_values(["順位","horseNo"]).head(5).copy()
-    if len(top) < 5:
+    base = g[(g["相対評価"]=="S") & (g["実力評価"].isin(["S","A"]))].sort_values(["順位","horseNo"]).head(1)
+    if base.empty:
+        base = g.sort_values(["順位","horseNo"]).head(1)
+    supporters = g[(g["実力評価"].isin(["S","A"])) & (g["horseNo"].astype(str) != str(base.iloc[0]["horseNo"]))].sort_values(["順位","horseNo"]).head(3)
+    if len(supporters) < 3:
+        supporters = g[g["horseNo"].astype(str) != str(base.iloc[0]["horseNo"])].sort_values(["順位","horseNo"]).head(3)
+    if base.empty or len(supporters) < 3:
         return "なし", "候補不足", "信頼度 - / 回収率 -"
-    axis1 = top.iloc[0]
-    axis2 = top.iloc[1]
-    others = top.iloc[2:5]
+    brow = base.iloc[0]
+    rows = list(supporters[["horseNo","horseName"]].itertuples(index=False, name=None))
     tickets = []
-    for _, r in others.iterrows():
-        nums = sorted([str(axis1["horseNo"]), str(axis2["horseNo"]), str(r["horseNo"])], key=lambda x: int(re.sub(r"\D", "", x) or 0))
+    for a, b in itertools.combinations(rows, 2):
+        nums = sorted([str(brow["horseNo"]), str(a[0]), str(b[0])], key=lambda x: int(re.sub(r"\D", "", x) or 0))
         tickets.append("-".join(nums))
     body = " / ".join(tickets)
-    name_body = f"軸: {axis1['horseNo']} {axis1['horseName']} / {axis2['horseNo']} {axis2['horseName']} → 相手: " + " / ".join([f"{r['horseNo']} {r['horseName']}" for _, r in others.iterrows()])
-    return body + "｜" + name_body, "上位2頭軸 → 3,4,5位へ3点", "信頼度 32.95% / 三連複回収率 1558.12%"
+    name_body = f"軸: {brow['horseNo']} {brow['horseName']} → 相手3頭: " + " / ".join([f"{r[0]} {r[1]}" for r in rows])
+    return body + "｜" + name_body, "複合軸（相対S×実力A以上）→ 相手3頭流し", "複合条件で試験運用"
 
 def build_update_table(pred_df, result_df):
     if result_df is None or result_df.empty:
@@ -410,8 +414,8 @@ def build_update_table(pred_df, result_df):
     merged["複勝圏"] = merged["finish"].astype(str).isin(["1","2","3","1.0","2.0","3.0"]).map({True:"○", False:""})
     return merged
 
-st.title("競馬ランクアプリ v9.8 Bet Update")
-st.write("馬連は相対S→相対A最上位1頭、三連複は上位2頭軸→3,4,5位へ3点に更新しています。")
+st.title("競馬ランクアプリ v9.9 Composite Flow")
+st.write("馬連は複合軸→相手3頭、三連複も複合軸→相手3頭流しに更新しています。")
 st.caption("おすすめ買い目は各券種1つだけ表示し、3年分実績ベースの信頼度%と回収率も表示します。")
 
 with st.sidebar:
