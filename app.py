@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v9.9 Composite Flow", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v10.0 Weight Test", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -18,7 +18,7 @@ DEFAULT_FILES = {
     "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks.csv"),
 }
 
-WEIGHTS = {"style": 37.5, "prevtrack": 22.5, "sire": 15.0, "damsire": 25.0}
+WEIGHTS = {"style": 25.0, "prevtrack": 15.0, "sire": 25.0, "damsire": 35.0}
 STYLE_MAP = {"逃":"逃げ","逃げ":"逃げ","先":"先行","先行":"先行","差":"差し","差し":"差し","追":"追込","追込":"追込","追い込み":"追込"}
 
 RACE_COLUMN_CANDIDATES = {
@@ -414,8 +414,8 @@ def build_update_table(pred_df, result_df):
     merged["複勝圏"] = merged["finish"].astype(str).isin(["1","2","3","1.0","2.0","3.0"]).map({True:"○", False:""})
     return merged
 
-st.title("競馬ランクアプリ v9.9 Composite Flow")
-st.write("馬連は複合軸→相手3頭、三連複も複合軸→相手3頭流しに更新しています。")
+st.title("競馬ランクアプリ v10.0 Weight Test")
+st.write("4月の9R・11R実戦を踏まえ、脚質比重を下げ、種牡馬・母父馬を重くした試験版です。馬連は複合軸→相手3頭、三連複も複合軸→相手3頭流しです。")
 st.caption("おすすめ買い目は各券種1つだけ表示し、3年分実績ベースの信頼度%と回収率も表示します。")
 
 with st.sidebar:
@@ -464,10 +464,10 @@ try:
     result_df["種牡馬点"] = result_df.apply(lambda r: lookup_score(r, sire_df, sire_fb, "sire", "種牡馬", "sire"), axis=1)
     result_df["母父馬点"] = result_df.apply(lambda r: lookup_score(r, dam_df, dam_fb, "damsire", "母父馬", "damsire"), axis=1)
     result_df["総合点"] = (
-        result_df["脚質点"] * 0.375 +
-        result_df["前走場所点"] * 0.225 +
-        result_df["種牡馬点"] * 0.15 +
-        result_df["母父馬点"] * 0.25
+        result_df["脚質点"] * 0.25 +
+        result_df["前走場所点"] * 0.15 +
+        result_df["種牡馬点"] * 0.25 +
+        result_df["母父馬点"] * 0.35
     ).round(2)
 
     bench = bench_raw.copy()
