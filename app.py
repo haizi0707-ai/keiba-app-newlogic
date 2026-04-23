@@ -15,12 +15,125 @@ DEFAULT_FILES = {
     "prevtrack": os.path.join(BASE_DIR, "prevtrack_stats_4factor.csv"),
     "sire": os.path.join(BASE_DIR, "sire_stats_4factor.csv"),
     "damsire": os.path.join(BASE_DIR, "damsire_stats_4factor.csv"),
-    "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks.csv"),
+    "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks_passing_order.csv"),
 }
 
 WEIGHTS = {"position": 25.0, "prevtrack": 15.0, "sire": 25.0, "damsire": 35.0}
+RACE_COLUMN_CANDIDATES = {
+    "date": ["date","日付","開催日","年月日","日付S"],
+    "場所": ["場所","track","競馬場","開催","場名"],
+    "raceNo": ["raceNo","race_number","raceNo.","R","レース番号","race_no","レースNo","R番号"],
+    "raceName": ["raceName","race_name","レース名"],
+    "horseNo": ["horseNo","horse_number","馬番"],
+    "horseName": ["horseName","horse_name","馬名"],
+    "distance": ["distance","距離"],
+    "surface": ["芝ダ","芝・ダ","surface"],
+    "prev4c": ["prev4c","前走4角","前走4角通過順","前走4角順位"],
+    "prevTrack": ["prevTrack","前走場所","前走場所タグ","前開催","前走競馬場"],
+    "sire": ["sire","種牡馬","血統"],
+    "damsire": ["damSire","母父馬"],
+    "raceLabel": ["レース","race"],
+}
+
+RESULT_COLUMN_CANDIDATES = {
+    "date": ["date","日付","開催日","年月日","日付S"],
+    "場所": ["場所","track","競馬場","開催","場名"],
+    "raceNo": ["raceNo","race_number","raceNo.","R","レース番号","race_no","レースNo","R番号"],
+    "raceName": ["raceName","race_name","レース名","レース"],
+    "horseNo": ["horseNo","horse_number","馬番"],
+    "horseName": ["horseName","horse_name","馬名"],
+    "finish": ["finishPosition","着順","finish_rank","順位"],
+    "raceLabel": ["レース","race"],
+}
+
+# ---- historical ROI summaries from prior 3-year calculations ----
+relative_returns = pd.DataFrame([
+    ["S",3417,31.34,78.58,247.12,220.97],
+    ["A",6672,17.15,50.54,160.53,158.72],
+    ["B",9120,7.71,25.39,81.78,87.02],
+    ["C",13116,3.16,11.51,32.78,43.51],
+    ["D",13647,0.76,3.08,14.89,14.53],
+], columns=["ランク","頭数","単勝率","複勝率","単回率","複回率"])
+
+real_returns = pd.DataFrame([
+    ["S",2360,33.18,85.21,250.98,240.76],
+    ["A",6881,19.27,54.82,177.54,167.76],
+    ["B",11457,7.82,25.32,83.60,87.78],
+    ["C",13818,2.71,9.91,30.62,38.48],
+    ["D",11456,0.49,2.18,8.70,10.19],
+], columns=["ランク","頭数","単勝率","複勝率","単回率","複回率"])
+
+combo_returns = pd.DataFrame([
+    ["S×S",1852,35.48,86.99,269.15,245.01],
+    ["S×A",2139,25.30,78.92,188.43,225.24],
+    ["A×S",498,25.30,78.92,188.43,225.24],
+    ["A×A",4201,18.85,54.13,178.77,167.65],
+    ["B×A",1153,11.54,38.68,121.90,133.53],
+    ["B×B",6709,7.63,24.43,82.53,83.77],
+], columns=["組み合わせ","頭数","単勝率","複勝率","単回率","複回率"])
+
+recommended_bets = pd.DataFrame([
+    ["単複おすすめ1", "改良軸（複合優先）から単複1頭", "実力A以上を優先 / 参考信頼度を表示", ""],
+    ["馬連おすすめ1", "改良軸 → 相手3頭", "条件を満たすレースのみ出力", "連系は見送り条件あり"],
+    ["三連複おすすめ1", "改良軸 → 相手3頭流し", "条件を満たすレースのみ出力", "連系は見送り条件あり"],
+], columns=["券種","買い方","信頼度","回収率"])
+
+
+def read_csv_any(file_obj_or_path):
+    encodings = ["utf-8-sig", "cp932", "shift_jis", "utf-8"]
+    last_err = None
+    for enc in encodings:
+        try:
+            if hasattr(file_obj_or_path, "seek"):
+                file_obj_or_path.seek(0)
+            return pd.read_csv(file_obj_or_path, encoding=enc)
+        except Exception as e:
+            last_err = e
+    raise last_err
+
+def norm_text(v):
+    if pd.isna(v):
+        return ""
+    s = unicodedata.normalize("NFKC", str(v)).strip()
+    return " ".join(s.split())
+
+def norm_track(v):
     s = norm_text(v)
-    return STYLE_MAP.get(s, s)
+    return {
+        "東京競馬場":"東京","中山競馬場":"中山","中京競馬場":"中京","阪神競馬場":"阪神",
+        "京都競馬場":"京都","新潟競馬場":"新潟","福島競馬場":"福島","小倉競馬場":"小倉",
+        "札幌競馬場":"札幌","函館競馬場":"函館",
+    }.get(s, s)
+
+def norm_surface(v):
+    s = norm_text(v)
+    if s.startswith("芝"):
+        return "芝"
+    if s.startswith("ダ") or s == "ダート":
+        return "ダ"
+    return s
+
+def parse_passing_order(v):
+    s = norm_text(v)
+    m = re.search(r"(\d+)", s)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
+
+def position_zone_from_order(v):
+    n = parse_passing_order(v)
+    if n is None:
+        return ""
+    if n <= 2:
+        return "前"
+    if n <= 5:
+        return "好位"
+    if n <= 9:
+        return "中団"
+    return "後方"
 
 def rename_first_match(df, candidates_map):
     df = df.copy()
@@ -43,7 +156,7 @@ def parse_race_label(v):
 
 def prepare_race_df(df):
     df = rename_first_match(df, RACE_COLUMN_CANDIDATES)
-    for col in ["date","場所","raceNo","raceName","horseNo","horseName","distance","surface","prev4c","prevprev4c","prevTrack","sire","damsire","raceLabel"]:
+    for col in ["date","場所","raceNo","raceName","horseNo","horseName","distance","surface","prev4c","prevTrack","sire","damsire","raceLabel"]:
         if col not in df.columns:
             df[col] = ""
 
@@ -55,10 +168,9 @@ def prepare_race_df(df):
 
     df["場所"] = df["場所"].apply(norm_track)
     df["surface"] = df["surface"].apply(norm_surface)
-    df["prevTrack"] = df["prevTrack"].apply(norm_track)
     df["prev4c"] = df["prev4c"].apply(norm_text)
-    df["prevprev4c"] = df["prevprev4c"].apply(norm_text)
-    df["位置取りゾーン"] = df.apply(lambda r: position_zone_from_orders(r.get("prev4c",""), r.get("prevprev4c","")), axis=1)
+    df["prevTrack"] = df["prevTrack"].apply(norm_track)
+    df["位置取りゾーン"] = df["prev4c"].apply(position_zone_from_order)
     df["sire"] = df["sire"].apply(norm_text)
     df["damsire"] = df["damsire"].apply(norm_text)
     df["horseName"] = df["horseName"].apply(norm_text)
@@ -119,8 +231,6 @@ def prepare_stat_table(df, value_col, kind):
 
 def lookup_score(row, stats_df, fallback_df, race_col, stat_col, kind):
     value = norm_text(row.get(race_col, ""))
-    if kind == "style":
-        value = norm_style(value)
     if kind == "prevtrack":
         value = norm_track(value)
     cond = (
@@ -354,12 +464,12 @@ def build_update_table(pred_df, result_df):
     return merged
 
 st.title("競馬ランクアプリ v10.2 Passing Order")
-st.write("脚質ラベルをやめ、前走4角・前々走4角の通過順ベースで位置取りを評価する版です。比重見直しと改良軸選定も維持し、連系は条件を満たした時だけ出します。")
+st.write("脚質ラベルを使わず、前走4角通過順を位置取りゾーン化して評価する版です。比重見直しと改良軸選定も維持し、連系は条件を満たした時だけ出します。")
 st.caption("おすすめ買い目は各券種1つだけ表示し、3年分実績ベースの信頼度%と回収率も表示します。")
 
 with st.sidebar:
     race_file = st.file_uploader("出走馬CSV", type=["csv"], key="race")
-    position_file = st.file_uploader("通過順ゾーンCSV", type=["csv"], key="position")
+    position_file = st.file_uploader("前走4角ゾーンCSV", type=["csv"], key="position")
     prev_file = st.file_uploader("前走場所CSV", type=["csv"], key="prev")
     sire_file = st.file_uploader("種牡馬CSV", type=["csv"], key="sire")
     damsire_file = st.file_uploader("母父馬CSV", type=["csv"], key="dam")
@@ -390,7 +500,7 @@ try:
     bench_raw = load_default_or_upload("benchmark", bench_file)
 
     if any(x is None for x in [position_raw, prev_raw, sire_raw, dam_raw, bench_raw]):
-        raise FileNotFoundError("必要CSVが不足しています。通過順ゾーンCSV、前走場所CSV、種牡馬CSV、母父馬CSV、分布ランク基準CSVを確認してください。")
+        raise FileNotFoundError("必要CSVが不足しています。前走4角ゾーンCSV、前走場所CSV、種牡馬CSV、母父馬CSV、分布ランク基準CSVを確認してください。")
 
     position_df, position_fb = prepare_stat_table(position_raw, "位置取りゾーン", "position")
     prev_df, prev_fb = prepare_stat_table(prev_raw, "前走場所", "prevtrack")
@@ -398,12 +508,12 @@ try:
     dam_df, dam_fb = prepare_stat_table(dam_raw, "母父馬", "damsire")
 
     result_df = race_df.copy()
-    result_df["通過順点"] = result_df.apply(lambda r: lookup_score(r, position_df, position_fb, "位置取りゾーン", "位置取りゾーン", "position"), axis=1)
+    result_df["前走4角点"] = result_df.apply(lambda r: lookup_score(r, position_df, position_fb, "位置取りゾーン", "位置取りゾーン", "position"), axis=1)
     result_df["前走場所点"] = result_df.apply(lambda r: lookup_score(r, prev_df, prev_fb, "prevTrack", "前走場所", "prevtrack"), axis=1)
     result_df["種牡馬点"] = result_df.apply(lambda r: lookup_score(r, sire_df, sire_fb, "sire", "種牡馬", "sire"), axis=1)
     result_df["母父馬点"] = result_df.apply(lambda r: lookup_score(r, dam_df, dam_fb, "damsire", "母父馬", "damsire"), axis=1)
     result_df["総合点"] = (
-        result_df["通過順点"] * 0.25 +
+        result_df["前走4角点"] * 0.25 +
         result_df["前走場所点"] * 0.15 +
         result_df["種牡馬点"] * 0.25 +
         result_df["母父馬点"] * 0.35
