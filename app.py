@@ -7,15 +7,15 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v10.2 Passing Order", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v10.3 Straight Logic", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
-    "position": os.path.join(BASE_DIR, "position_stats_4factor.csv"),
-    "prevtrack": os.path.join(BASE_DIR, "prevtrack_stats_4factor.csv"),
-    "sire": os.path.join(BASE_DIR, "sire_stats_4factor.csv"),
-    "damsire": os.path.join(BASE_DIR, "damsire_stats_4factor.csv"),
-    "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks_passing_order.csv"),
+    "position": os.path.join(BASE_DIR, "position_stats_4factor_fixed.csv"),
+    "prevtrack": os.path.join(BASE_DIR, "prevtrack_stats_4factor_fixed.csv"),
+    "sire": os.path.join(BASE_DIR, "sire_stats_4factor_fixed.csv"),
+    "damsire": os.path.join(BASE_DIR, "damsire_stats_4factor_fixed.csv"),
+    "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks_passing_order_fixed.csv"),
 }
 
 WEIGHTS = {"position": 25.0, "prevtrack": 15.0, "sire": 25.0, "damsire": 35.0}
@@ -30,6 +30,7 @@ RACE_COLUMN_CANDIDATES = {
     "surface": ["芝ダ","芝・ダ","surface"],
     "prev4c": ["prev4c","前走4角","前走4角通過順","前走4角順位"],
     "prevTrack": ["prevTrack","前走場所","前走場所タグ","前開催","前走競馬場"],
+    "straightAdj": ["straightAdj","直線ロジック補正","直線補正","直線ロジック","直線評価補正"],
     "sire": ["sire","種牡馬","血統"],
     "damsire": ["damSire","母父馬"],
     "raceLabel": ["レース","race"],
@@ -73,9 +74,9 @@ combo_returns = pd.DataFrame([
 ], columns=["組み合わせ","頭数","単勝率","複勝率","単回率","複回率"])
 
 recommended_bets = pd.DataFrame([
-    ["単複おすすめ1", "改良軸（複合優先）から単複1頭", "実力A以上を優先 / 参考信頼度を表示", ""],
-    ["馬連おすすめ1", "改良軸 → 相手3頭", "条件を満たすレースのみ出力", "連系は見送り条件あり"],
-    ["三連複おすすめ1", "改良軸 → 相手3頭流し", "条件を満たすレースのみ出力", "連系は見送り条件あり"],
+    ["単複おすすめ1", "改良軸（複合優先）＋直線補正から単複1頭", "実力A以上を優先 / 参考信頼度を表示", ""],
+    ["馬連おすすめ1", "改良軸＋直線補正 → 相手3頭", "条件を満たすレースのみ出力", "連系は見送り条件あり"],
+    ["三連複おすすめ1", "改良軸＋直線補正 → 相手3頭流し", "条件を満たすレースのみ出力", "連系は見送り条件あり"],
 ], columns=["券種","買い方","信頼度","回収率"])
 
 
@@ -156,7 +157,7 @@ def parse_race_label(v):
 
 def prepare_race_df(df):
     df = rename_first_match(df, RACE_COLUMN_CANDIDATES)
-    for col in ["date","場所","raceNo","raceName","horseNo","horseName","distance","surface","prev4c","prevTrack","sire","damsire","raceLabel"]:
+    for col in ["date","場所","raceNo","raceName","horseNo","horseName","distance","surface","prev4c","prevTrack","sire","damsire","straightAdj","raceLabel"]:
         if col not in df.columns:
             df[col] = ""
 
@@ -176,6 +177,7 @@ def prepare_race_df(df):
     df["horseName"] = df["horseName"].apply(norm_text)
     df["raceName"] = df["raceName"].apply(norm_text)
     df["date"] = df["date"].apply(norm_text)
+    df["straightAdj"] = pd.to_numeric(df["straightAdj"], errors="coerce").fillna(0.0)
     df["distance"] = pd.to_numeric(df["distance"], errors="coerce")
     df["raceNo"] = df["raceNo"].astype(str).str.replace(".0", "", regex=False).str.strip()
     df["horseNo"] = df["horseNo"].astype(str).str.replace(".0", "", regex=False).str.strip()
@@ -463,8 +465,8 @@ def build_update_table(pred_df, result_df):
     merged["複勝圏"] = merged["finish"].astype(str).isin(["1","2","3","1.0","2.0","3.0"]).map({True:"○", False:""})
     return merged
 
-st.title("競馬ランクアプリ v10.2 Passing Order")
-st.write("脚質ラベルを使わず、前走4角通過順を位置取りゾーン化して評価する版です。比重見直しと改良軸選定も維持し、連系は条件を満たした時だけ出します。")
+st.title("競馬ランクアプリ v10.3 Straight Logic")
+st.write("前走4角4ファクターに、直線ロジック補正を加える版です。位置取り・前走場所・種牡馬・母父馬を土台にし、直線ロジックで最終補正します。")
 st.caption("おすすめ買い目は各券種1つだけ表示し、3年分実績ベースの信頼度%と回収率も表示します。")
 
 with st.sidebar:
