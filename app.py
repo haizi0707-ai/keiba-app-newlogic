@@ -241,38 +241,34 @@ def recommend_for_race(g):
         trio = f'{int(single["horseNo"])}-{int(a["horseNo"])}-{int(b["horseNo"])} / {int(single["horseNo"])}-{int(a["horseNo"])}-{int(c["horseNo"])} / {int(single["horseNo"])}-{int(b["horseNo"])}-{int(c["horseNo"])}'
     return single, pair, trio
 
+
 def render_rank_cards(g):
-    badge_map = {"S": "#d4af37", "A": "#c0c0c0", "B": "#cd7f32", "C": "#6b7280", "D": "#374151"}
+    badge_map = {"S": "#d4af37", "A": "#d6deef", "B": "#c7a85a", "C": "#7b8db7", "D": "#53627f"}
     rows = []
-    for i, (_, r) in enumerate(g.iterrows(), start=1):
-        rel_color = badge_map.get(r["相対評価"], "#6b7280")
-        pow_color = badge_map.get(r["実力評価"], "#6b7280")
+    for _, r in g.iterrows():
+        rank_color = badge_map.get(r["実力評価"], "#7b8db7")
         rows.append(f"""
-        <div style="display:grid;grid-template-columns:28px 28px minmax(0,1fr) 44px 44px 56px;gap:6px;align-items:center;
-                    padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.06);">
-          <div style="font-size:12px;color:#9fb1d9;font-weight:700;text-align:center;">{i}</div>
-          <div style="font-size:13px;color:#cfe0ff;font-weight:800;text-align:center;">{int(r["horseNo"])}</div>
-          <div style="font-size:18px;color:white;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{r["horseName"]}</div>
-          <div style="width:36px;height:36px;border-radius:10px;border:2px solid {rel_color};display:flex;align-items:center;justify-content:center;
-                      color:white;font-weight:800;font-size:16px;margin:0 auto;">{r["相対評価"]}</div>
-          <div style="width:36px;height:36px;border-radius:10px;border:2px solid {pow_color};display:flex;align-items:center;justify-content:center;
-                      color:white;font-weight:800;font-size:16px;margin:0 auto;">{r["実力評価"]}</div>
-          <div style="font-size:13px;color:#e8eefc;font-weight:800;text-align:right;">{r["総合点"]:.1f}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;
+                    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+                    border-radius:20px;padding:14px 16px;margin:10px 0;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                <div style="font-size:15px;color:#aebee0;font-weight:700;min-width:20px;text-align:center;">{int(r["horseNo"])}</div>
+                <div style="font-size:26px;color:white;font-weight:850;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{r["horseName"]}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">
+                <div style="font-size:12px;color:#b9c7e8;">ランク</div>
+                <div style="width:50px;height:50px;border-radius:15px;border:3px solid {rank_color};
+                            display:flex;align-items:center;justify-content:center;color:white;
+                            font-weight:900;font-size:22px;">{r["実力評価"]}</div>
+            </div>
         </div>
         """)
     html = f"""
-    <div style="background:#081a36;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:10px 10px 6px 10px;
-                box-shadow:0 6px 16px rgba(0,0,0,0.16);">
-      <div style="display:grid;grid-template-columns:28px 28px minmax(0,1fr) 44px 44px 56px;gap:6px;align-items:end;
-                  padding:0 4px 8px 4px;border-bottom:1px solid rgba(255,255,255,0.10);margin-bottom:4px;">
-        <div style="font-size:10px;color:#93a7d3;text-align:center;">順</div>
-        <div style="font-size:10px;color:#93a7d3;text-align:center;">番</div>
-        <div style="font-size:10px;color:#93a7d3;">馬名</div>
-        <div style="font-size:10px;color:#93a7d3;text-align:center;">相対</div>
-        <div style="font-size:10px;color:#93a7d3;text-align:center;">実力</div>
-        <div style="font-size:10px;color:#93a7d3;text-align:right;">総合</div>
-      </div>
-      {''.join(rows)}
+    <div style="background:#061734;border-radius:28px;padding:20px 18px 16px 18px;
+                box-shadow:0 8px 24px rgba(0,0,0,0.18);">
+        <div style="font-size:23px;font-weight:900;color:white;line-height:1.2;">{g.iloc[0]["date"]} {g.iloc[0]["レース"]}</div>
+        <div style="font-size:15px;color:#c3d0e8;margin-top:6px;">{g.iloc[0]["raceName"]} / {g.iloc[0]["距離表示"]}</div>
+        <div style="margin-top:14px;">{''.join(rows)}</div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
@@ -304,10 +300,8 @@ else:
     tab1, tab2 = st.tabs(["ランキング", "おすすめ買い目"])
     with tab1:
         st.header("ランキング")
-        st.caption("1レースを1枚のコンパクトカードで表示します。横スクロールなし・縦幅もできるだけ圧縮しています。")
         for rk in df["レースキー"].unique():
             g = df[df["レースキー"] == rk].sort_values(["総合点","horseNo"], ascending=[False, True]).reset_index(drop=True)
-            st.subheader(f'{g.iloc[0]["date"]} {g.iloc[0]["レース"]} {g.iloc[0]["raceName"]}')
             render_rank_cards(g)
             st.divider()
     with tab2:
@@ -317,7 +311,7 @@ else:
             single, pair, trio = recommend_for_race(g)
             st.markdown("### 単複おすすめ1")
             st.write(f'候補: {int(single["horseNo"])} {single["horseName"]}')
-            st.caption(f'相対{single["相対評価"]} × 実力{single["実力評価"]} / 本体点 {single["本体点"]:.1f} / 展開補正 {single["展開位置補正"]:.2f} / 場所直線補正 {single["前走場所直線補正"]:.2f} / 総合点 {single["総合点"]:.2f} / 参考信頼度 {confidence_from_score(single["総合点"]):.2f}%')
+            st.caption(f'トータル{single["実力評価"]} / 本体点 {single["本体点"]:.1f} / 展開補正 {single["展開位置補正"]:.2f} / 場所直線補正 {single["前走場所直線補正"]:.2f} / 総合点 {single["総合点"]:.2f} / 参考信頼度 {confidence_from_score(single["総合点"]):.2f}%')
             st.markdown("### 馬連おすすめ1")
             st.write(pair)
             st.markdown("### 三連複おすすめ1")
