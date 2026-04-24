@@ -300,8 +300,8 @@ def render_rank_cards(g):
         background:rgba(255,255,255,0.03);
         border:1px solid rgba(255,255,255,0.06);
         border-radius:20px;
-        padding:14px 16px;
-        margin:10px 0;
+        padding:12px 14px;
+        margin:8px 0;
       }}
       .horse-left {{
         display:flex;
@@ -318,7 +318,7 @@ def render_rank_cards(g):
         text-align:center;
       }}
       .horse-name {{
-        font-size:26px;
+        font-size:24px;
         color:white;
         font-weight:850;
         line-height:1.05;
@@ -363,7 +363,8 @@ def render_rank_cards(g):
     </body>
     </html>
     """
-    height = 110 + len(g) * 78
+    # iPhone表示でカード下部が切れやすいので余白を大きめに確保
+    height = 170 + len(g) * 98
     components.html(html, height=height, scrolling=False)
 
 st.title("競馬ランクアプリ v12.0 Multiplier Logic")
