@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v11.0 Straight Main", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v11.1 Straight Balance", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -467,8 +467,8 @@ def build_update_table(pred_df, result_df):
     merged["複勝圏"] = merged["finish"].astype(str).isin(["1","2","3","1.0","2.0","3.0"]).map({True:"○", False:""})
     return merged
 
-st.title("競馬ランクアプリ v11.0 Straight Main")
-st.write("直線ロジックを主軸にし、前走と前々走の内容を加重して評価する版です。4角・前走場所・種牡馬・母父馬は補正として使います。")
+st.title("競馬ランクアプリ v11.1 Straight Balance")
+st.write("直線ロジックをやや主役に残しつつ、4項目補正もしっかり効かせる準フラット版です。直線と補正のバランスを取り直しています。")
 st.caption("おすすめ買い目は各券種1つだけ表示し、3年分実績ベースの信頼度%と回収率も表示します。")
 
 with st.sidebar:
