@@ -5,6 +5,7 @@ import unicodedata
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="競馬ランクアプリ v12.0 Multiplier Logic", layout="centered")
 
@@ -242,36 +243,128 @@ def recommend_for_race(g):
     return single, pair, trio
 
 
+
 def render_rank_cards(g):
     badge_map = {"S": "#d4af37", "A": "#d6deef", "B": "#c7a85a", "C": "#7b8db7", "D": "#53627f"}
     rows = []
     for _, r in g.iterrows():
         rank_color = badge_map.get(r["実力評価"], "#7b8db7")
         rows.append(f"""
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;
-                    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
-                    border-radius:20px;padding:14px 16px;margin:10px 0;">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
-                <div style="font-size:15px;color:#aebee0;font-weight:700;min-width:20px;text-align:center;">{int(r["horseNo"])}</div>
-                <div style="font-size:26px;color:white;font-weight:850;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{r["horseName"]}</div>
+        <div class="horse-row">
+            <div class="horse-left">
+                <div class="horse-no">{int(r["horseNo"])}</div>
+                <div class="horse-name">{r["horseName"]}</div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">
-                <div style="font-size:12px;color:#b9c7e8;">ランク</div>
-                <div style="width:50px;height:50px;border-radius:15px;border:3px solid {rank_color};
-                            display:flex;align-items:center;justify-content:center;color:white;
-                            font-weight:900;font-size:22px;">{r["実力評価"]}</div>
+            <div class="horse-rank-wrap">
+                <div class="horse-rank-label">ランク</div>
+                <div class="horse-rank" style="border-color:{rank_color};">{r["実力評価"]}</div>
             </div>
         </div>
         """)
+
     html = f"""
-    <div style="background:#061734;border-radius:28px;padding:20px 18px 16px 18px;
-                box-shadow:0 8px 24px rgba(0,0,0,0.18);">
-        <div style="font-size:23px;font-weight:900;color:white;line-height:1.2;">{g.iloc[0]["date"]} {g.iloc[0]["レース"]}</div>
-        <div style="font-size:15px;color:#c3d0e8;margin-top:6px;">{g.iloc[0]["raceName"]} / {g.iloc[0]["距離表示"]}</div>
-        <div style="margin-top:14px;">{''.join(rows)}</div>
-    </div>
+    <html>
+    <head>
+    <meta charset="utf-8" />
+    <style>
+      body {{
+        margin: 0;
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }}
+      .card {{
+        background:#061734;
+        border-radius:28px;
+        padding:20px 18px 16px 18px;
+        box-shadow:0 8px 24px rgba(0,0,0,0.18);
+        color:white;
+      }}
+      .title {{
+        font-size:23px;
+        font-weight:900;
+        line-height:1.2;
+      }}
+      .subtitle {{
+        font-size:15px;
+        color:#c3d0e8;
+        margin-top:6px;
+      }}
+      .list {{
+        margin-top:14px;
+      }}
+      .horse-row {{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        background:rgba(255,255,255,0.03);
+        border:1px solid rgba(255,255,255,0.06);
+        border-radius:20px;
+        padding:14px 16px;
+        margin:10px 0;
+      }}
+      .horse-left {{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        min-width:0;
+        flex:1;
+      }}
+      .horse-no {{
+        font-size:15px;
+        color:#aebee0;
+        font-weight:700;
+        min-width:20px;
+        text-align:center;
+      }}
+      .horse-name {{
+        font-size:26px;
+        color:white;
+        font-weight:850;
+        line-height:1.05;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      }}
+      .horse-rank-wrap {{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:4px;
+        flex-shrink:0;
+      }}
+      .horse-rank-label {{
+        font-size:12px;
+        color:#b9c7e8;
+      }}
+      .horse-rank {{
+        width:50px;
+        height:50px;
+        border-radius:15px;
+        border:3px solid #7b8db7;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        color:white;
+        font-weight:900;
+        font-size:22px;
+        box-sizing:border-box;
+      }}
+    </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="title">{g.iloc[0]["date"]} {g.iloc[0]["レース"]}</div>
+        <div class="subtitle">{g.iloc[0]["raceName"]} / {g.iloc[0]["距離表示"]}</div>
+        <div class="list">
+          {''.join(rows)}
+        </div>
+      </div>
+    </body>
+    </html>
     """
-    st.markdown(html, unsafe_allow_html=True)
+    height = 110 + len(g) * 78
+    components.html(html, height=height, scrolling=False)
 
 st.title("競馬ランクアプリ v12.0 Multiplier Logic")
 st.write("直線ロジック本体50点を、展開位置補正と前走場所直線補正の係数で評価する版です。")
