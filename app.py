@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="競馬ランクアプリ v10.3 Straight Logic", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v10.4 Semi-Flat", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
@@ -18,7 +18,7 @@ DEFAULT_FILES = {
     "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks_passing_order.csv"),
 }
 
-WEIGHTS = {"position": 25.0, "prevtrack": 15.0, "sire": 25.0, "damsire": 35.0}
+WEIGHTS = {"position": 25.0, "prevtrack": 20.0, "sire": 25.0, "damsire": 30.0}
 RACE_COLUMN_CANDIDATES = {
     "date": ["date","日付","開催日","年月日","日付S"],
     "場所": ["場所","track","競馬場","開催","場名"],
@@ -465,8 +465,8 @@ def build_update_table(pred_df, result_df):
     merged["複勝圏"] = merged["finish"].astype(str).isin(["1","2","3","1.0","2.0","3.0"]).map({True:"○", False:""})
     return merged
 
-st.title("競馬ランクアプリ v10.3 Straight Logic")
-st.write("前走4角4ファクターに、直線ロジック補正を加える版です。位置取り・前走場所・種牡馬・母父馬を土台にし、直線ロジックで最終補正します。")
+st.title("競馬ランクアプリ v10.4 Semi-Flat")
+st.write("前走4角4ファクターを準フラット比重にし、直線ロジック補正を加える版です。血統偏重を少し弱め、前走場所を少し重くしています。")
 st.caption("おすすめ買い目は各券種1つだけ表示し、3年分実績ベースの信頼度%と回収率も表示します。")
 
 with st.sidebar:
