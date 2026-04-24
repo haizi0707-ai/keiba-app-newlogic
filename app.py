@@ -11,11 +11,11 @@ st.set_page_config(page_title="競馬ランクアプリ v10.3 Straight Logic", l
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 DEFAULT_FILES = {
-    "position": os.path.join(BASE_DIR, "position_stats_4factor_fixed.csv"),
-    "prevtrack": os.path.join(BASE_DIR, "prevtrack_stats_4factor_fixed.csv"),
-    "sire": os.path.join(BASE_DIR, "sire_stats_4factor_fixed.csv"),
-    "damsire": os.path.join(BASE_DIR, "damsire_stats_4factor_fixed.csv"),
-    "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks_passing_order_fixed.csv"),
+    "position": os.path.join(BASE_DIR, "position_stats_4factor.csv"),
+    "prevtrack": os.path.join(BASE_DIR, "prevtrack_stats_4factor.csv"),
+    "sire": os.path.join(BASE_DIR, "sire_stats_4factor.csv"),
+    "damsire": os.path.join(BASE_DIR, "damsire_stats_4factor.csv"),
+    "benchmark": os.path.join(BASE_DIR, "benchmark_4factor_condition_ranks_passing_order.csv"),
 }
 
 WEIGHTS = {"position": 25.0, "prevtrack": 15.0, "sire": 25.0, "damsire": 35.0}
