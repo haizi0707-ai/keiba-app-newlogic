@@ -182,21 +182,35 @@ if uploaded is not None:
     df["実力評価"] = df["総合点"].apply(absolute_rank)
     df = assign_relative_ranks(df)
 
-    st.header("予想結果")
-    for rk in df["レースキー"].unique():
-        g = df[df["レースキー"] == rk].sort_values(["総合点","horseNo"], ascending=[False, True]).reset_index(drop=True)
-        title = f'{g.iloc[0]["date"]} {g.iloc[0]["レース"]} {g.iloc[0]["raceName"]}'
-        st.subheader(title)
-        rec = recommend_for_race(g)
-        single = rec["single"]
-        st.markdown("### 単複おすすめ1")
-        st.write(f'候補: {int(single["horseNo"])} {single["horseName"]}')
-        st.caption(f'直線主軸 / 相対{single["相対評価"]} × 実力{single["実力評価"]} / 総合点 {single["総合点"]:.1f} / 参考信頼度 {confidence_from_score(single["総合点"]):.2f}%')
-        st.markdown("### 馬連おすすめ1")
-        st.write(f'候補: {rec["pair_text"]}')
-        st.markdown("### 三連複おすすめ1")
-        st.write(f'候補: {rec["trio_text"]}')
-        st.divider()
+    tab_rank, tab_bets = st.tabs(["ランキング", "おすすめ買い目"])
+
+    with tab_rank:
+        st.header("ランキング")
+        for rk in df["レースキー"].unique():
+            g = df[df["レースキー"] == rk].sort_values(["総合点","horseNo"], ascending=[False, True]).reset_index(drop=True)
+            title = f'{g.iloc[0]["date"]} {g.iloc[0]["レース"]} {g.iloc[0]["raceName"]}'
+            st.subheader(title)
+            show = g[["horseNo","horseName","相対評価","実力評価","直線ロジック点","補正点","総合点"]].copy()
+            show.columns = ["馬番","馬名","相対","実力","直線","補正","総合点"]
+            st.dataframe(show, use_container_width=True, hide_index=True)
+            st.divider()
+
+    with tab_bets:
+        st.header("おすすめ買い目")
+        for rk in df["レースキー"].unique():
+            g = df[df["レースキー"] == rk].sort_values(["総合点","horseNo"], ascending=[False, True]).reset_index(drop=True)
+            title = f'{g.iloc[0]["date"]} {g.iloc[0]["レース"]} {g.iloc[0]["raceName"]}'
+            st.subheader(title)
+            rec = recommend_for_race(g)
+            single = rec["single"]
+            st.markdown("### 単複おすすめ1")
+            st.write(f'候補: {int(single["horseNo"])} {single["horseName"]}')
+            st.caption(f'直線主軸 / 相対{single["相対評価"]} × 実力{single["実力評価"]} / 総合点 {single["総合点"]:.1f} / 参考信頼度 {confidence_from_score(single["総合点"]):.2f}%')
+            st.markdown("### 馬連おすすめ1")
+            st.write(f'候補: {rec["pair_text"]}')
+            st.markdown("### 三連複おすすめ1")
+            st.write(f'候補: {rec["trio_text"]}')
+            st.divider()
 
     export_cols = ["date","場所","レース","raceName","horseNo","horseName","距離表示","相対評価","実力評価","直線ロジック点","補正点","総合点"]
     export_df = df[export_cols].rename(columns={
