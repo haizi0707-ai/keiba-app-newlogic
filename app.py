@@ -237,19 +237,166 @@ def assign_relative_ranks(df):
                 out.at[ix, "相対評価"] = "D"
     return out
 
+
+def _rank_score(v):
+    return {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}.get(str(v), 0)
+
+def _eval_score(v):
+    return {"かなり向く": 5, "向く": 4, "普通": 3, "やや不向き": 2, "不向き": 1}.get(norm_text(v), 3)
+
+def _position_score(v):
+    s = norm_text(v)
+    if "1" in s and "番手" in s:
+        return 1
+    if "2-3" in s or "2~3" in s or "2〜3" in s:
+        return 2
+    if "4-6" in s or "4~6" in s or "4〜6" in s:
+        return 3
+    if "7-10" in s or "7~10" in s or "7〜10" in s:
+        return 4
+    if "11" in s:
+        return 5
+    return 3
+
+def _horse_label(row):
+    return f'{int(row["horseNo"])} {row["horseName"]}'
+
+def _wide_pair_text(honmei, mate):
+    return f'{int(honmei["horseNo"])} - {int(mate["horseNo"])}'
+
 def recommend_for_race(g):
+    """
+    おすすめ馬券ロジック:
+    - 本命は既存の単複おすすめ1をそのまま使用
+    - 参考信頼度90%未満は見送り
+    - 買い対象はワイド2点
+      1) 本命 - 同展開相手
+      2) 本命 - 補完相手
+    """
     g = g.sort_values(["総合点","horseNo"], ascending=[False, True]).reset_index(drop=True)
-    single = g.iloc[0]
-    pair = "見送り"
-    trio = "見送り"
-    use = g[(g["トータルランク"].isin(["S","A"])) & (g["相対評価"].isin(["S","A","B"]))]
-    if len(use) >= 2:
-        pair = " / ".join([f'{int(single["horseNo"])}-{int(r["horseNo"])}' for _, r in use.iloc[1:4].iterrows()])
-    if len(use) >= 4:
-        a, b, c = use.iloc[1], use.iloc[2], use.iloc[3]
-        trio = f'{int(single["horseNo"])}-{int(a["horseNo"])}-{int(b["horseNo"])} / {int(single["horseNo"])}-{int(a["horseNo"])}-{int(c["horseNo"])} / {int(single["horseNo"])}-{int(b["horseNo"])}-{int(c["horseNo"])}'
-    short_comment = f'本体{single["本体点"]:.1f}×展開{single["展開位置補正"]:.2f}×場所{single["前走場所直線補正"]:.2f}'
-    return single, pair, trio, short_comment
+    honmei = g.iloc[0]
+    conf = confidence_from_score(honmei["総合点"])
+    short_comment = f'本体{honmei["本体点"]:.1f}×展開{honmei["展開位置補正"]:.2f}×場所{honmei["前走場所直線補正"]:.2f}'
+
+    if conf < 90.0:
+        return {
+            "honmei": honmei,
+            "confidence": conf,
+            "status": "見送り",
+            "bet_type": "見送り",
+            "same_mate": None,
+            "comp_mate": None,
+            "wide1": "見送り",
+            "wide2": "見送り",
+            "reason": "本命信頼度が90%未満",
+            "short_comment": short_comment,
+        }
+
+    # 候補: 本命以外、D評価は除外
+    cand = g[g.index != 0].copy()
+    cand = cand[cand["トータルランク"].astype(str) != "D"].copy()
+
+    if cand.empty:
+        return {
+            "honmei": honmei,
+            "confidence": conf,
+            "status": "買い対象",
+            "bet_type": "ワイド2点",
+            "same_mate": None,
+            "comp_mate": None,
+            "wide1": "相手不足",
+            "wide2": "相手不足",
+            "reason": "D評価除外後に相手候補が不足",
+            "short_comment": short_comment,
+        }
+
+    # 本命の展開/位置情報
+    h_pace = _eval_score(honmei.get("paceEval", "普通"))
+    h_straight = _eval_score(honmei.get("straightEval", "普通"))
+    h_3c = _position_score(honmei.get("prev3cCat", ""))
+    h_4c = _position_score(honmei.get("prev4cCat", ""))
+
+    cand["rank_score"] = cand["トータルランク"].apply(_rank_score)
+    cand["pace_score"] = cand["paceEval"].apply(_eval_score)
+    cand["straight_score"] = cand["straightEval"].apply(_eval_score)
+    cand["pos3_score"] = cand["prev3cCat"].apply(_position_score)
+    cand["pos4_score"] = cand["prev4cCat"].apply(_position_score)
+
+    # 相手1: 同展開相手
+    # 本命と展開評価・3角4角位置が近く、A/B以上や総合点上位を優先
+    cand["same_gap"] = (
+        (cand["pace_score"] - h_pace).abs()
+        + (cand["straight_score"] - h_straight).abs() * 0.5
+        + (cand["pos3_score"] - h_3c).abs() * 0.7
+        + (cand["pos4_score"] - h_4c).abs() * 0.9
+    )
+    cand["same_score"] = (
+        cand["rank_score"] * 18
+        + cand["総合点"] * 0.70
+        - cand["same_gap"] * 10
+    )
+    same_pool = cand[cand["トータルランク"].isin(["S","A","B"])].copy()
+    if same_pool.empty:
+        same_pool = cand.copy()
+    same_mate = same_pool.sort_values(["same_score","総合点","horseNo"], ascending=[False, False, True]).iloc[0]
+
+    # 相手2: 補完相手
+    # 本命と展開/位置が少し違う馬を優先。Cまで許可、Dは除外済み。
+    comp_pool = cand[cand["horseNo"] != same_mate["horseNo"]].copy()
+    if comp_pool.empty:
+        comp_mate = None
+    else:
+        comp_pool["diff_gap"] = (
+            (comp_pool["pace_score"] - h_pace).abs()
+            + (comp_pool["pos3_score"] - h_3c).abs() * 0.8
+            + (comp_pool["pos4_score"] - h_4c).abs() * 1.0
+        )
+        # 違いが大きすぎる馬は弱め、1〜3程度のズレを補完として評価
+        comp_pool["comp_fit"] = comp_pool["diff_gap"].apply(lambda x: 12 if 1.0 <= x <= 3.5 else (6 if x > 0 else 0))
+        comp_pool["comp_score"] = (
+            comp_pool["comp_fit"]
+            + comp_pool["rank_score"] * 13
+            + comp_pool["総合点"] * 0.55
+            + comp_pool["展開位置補正"] * 8
+        )
+        # 能力が低すぎる馬は除外。足りなければ戻す。
+        strong_pool = comp_pool[(comp_pool["トータルランク"].isin(["S","A","B","C"])) & (comp_pool["総合点"] >= 38)].copy()
+        if strong_pool.empty:
+            strong_pool = comp_pool.copy()
+        comp_mate = strong_pool.sort_values(["comp_score","総合点","horseNo"], ascending=[False, False, True]).iloc[0]
+
+    # 相手不足時の補完
+    if comp_mate is None:
+        rest = g[(g.index != 0) & (g["horseNo"] != same_mate["horseNo"]) & (g["トータルランク"].astype(str) != "D")]
+        if not rest.empty:
+            comp_mate = rest.sort_values(["総合点","horseNo"], ascending=[False, True]).iloc[0]
+
+    same_reason = (
+        f'同展開相手: {_horse_label(same_mate)}。'
+        f'本命と展開評価・位置取りが近く、トータル{same_mate["トータルランク"]}で同じ流れに乗りやすい。'
+    )
+    if comp_mate is not None:
+        comp_reason = (
+            f'補完相手: {_horse_label(comp_mate)}。'
+            f'本命と位置/展開にズレがあり、流れが少し変わった時の拾い役。トータル{comp_mate["トータルランク"]}。'
+        )
+        wide2 = _wide_pair_text(honmei, comp_mate)
+    else:
+        comp_reason = '補完相手: 条件を満たす相手が不足。'
+        wide2 = "相手不足"
+
+    return {
+        "honmei": honmei,
+        "confidence": conf,
+        "status": "買い対象",
+        "bet_type": "ワイド2点",
+        "same_mate": same_mate,
+        "comp_mate": comp_mate,
+        "wide1": _wide_pair_text(honmei, same_mate),
+        "wide2": wide2,
+        "reason": same_reason + "\n" + comp_reason,
+        "short_comment": short_comment,
+    }
 
 
 def render_rank_cards(g):
@@ -375,7 +522,9 @@ def render_rank_cards(g):
     </body>
     </html>
     """
-    height = 135 + len(g) * 86
+    # iPhone/Streamlit CloudではHTMLカードの実高さが計算より大きくなりやすいので、
+    # かなり余裕を持たせて全頭が切れないようにする。
+    height = 190 + len(g) * 112
     components.html(html, height=height, scrolling=False)
 
 
@@ -656,26 +805,40 @@ else:
         for race_id in df["レース識別ID"].unique():
             g = df[df["レース識別ID"] == race_id].sort_values(["総合点","horseNo"], ascending=[False, True]).reset_index(drop=True)
             st.subheader(f'{g.iloc[0]["date"]} {g.iloc[0]["レース"]} {g.iloc[0]["raceName"]}')
-            single, pair, trio, comment = recommend_for_race(g)
-            conf = confidence_from_score(single["総合点"])
+            rec = recommend_for_race(g)
+            honmei = rec["honmei"]
+            conf = rec["confidence"]
+
             st.markdown("### 単複おすすめ1")
-            st.write(f'候補: {int(single["horseNo"])} {single["horseName"]}')
-            st.caption(f'トータル{single["トータルランク"]} / 総合点 {single["総合点"]:.2f} / 参考信頼度 {conf:.2f}% / {comment}')
-            st.markdown("### 馬連おすすめ1")
-            st.write(pair)
-            st.markdown("### 三連複おすすめ1")
-            st.write(trio)
+            st.write(f'候補: {int(honmei["horseNo"])} {honmei["horseName"]}')
+            st.caption(f'トータル{honmei["トータルランク"]} / 総合点 {honmei["総合点"]:.2f} / 参考信頼度 {conf:.2f}% / {rec["short_comment"]}')
+
+            st.markdown("### おすすめ馬券")
+            if rec["status"] == "見送り":
+                st.write("見送り")
+                st.caption(f'理由：{rec["reason"]}')
+            else:
+                st.write("買い方：ワイド2点")
+                st.write(f'買い目1：{rec["wide1"]}　同展開相手')
+                st.write(f'買い目2：{rec["wide2"]}　補完相手')
+                st.caption(rec["reason"])
+
             st.divider()
 
             current_recs.append({
-                "日付": single["date"],
-                "場所": norm_track(single["場所"]),
-                "R": safe_race_no(single),
-                "馬番": int(single["horseNo"]),
-                "馬名": single["horseName"],
-                "単複おすすめ1": f'{int(single["horseNo"])} {single["horseName"]}',
+                "日付": honmei["date"],
+                "場所": honmei["場所"],
+                "R": safe_race_no(honmei),
+                "馬番": int(honmei["horseNo"]),
+                "馬名": honmei["horseName"],
+                "単複おすすめ1": f'{int(honmei["horseNo"])} {honmei["horseName"]}',
                 "参考信頼度": round(float(conf), 2),
-                "短評": comment,
+                "短評": rec["short_comment"],
+                "買い対象": 1 if conf >= 90.0 else 0,
+                "おすすめ馬券": rec["bet_type"],
+                "ワイド1": rec["wide1"],
+                "ワイド2": rec["wide2"],
+                "相手選定理由": rec["reason"],
             })
 
     with tab3:
