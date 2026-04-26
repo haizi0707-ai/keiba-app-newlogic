@@ -495,6 +495,24 @@ def make_sns_image(saved):
     bio.seek(0)
     return bio
 
+
+def safe_race_no(row):
+    """raceNo が空/NaNでも、レース表記からR番号を復元する"""
+    try:
+        v = row.get("raceNo", np.nan)
+        if pd.notna(v):
+            return int(float(v))
+    except Exception:
+        pass
+
+    for key in ["レース", "raceLabel", "raceName"]:
+        s = norm_text(row.get(key, ""))
+        m = re.search(r"(\d+)\s*R", s)
+        if m:
+            return int(m.group(1))
+    return 0
+
+
 def add_saved_recs(new_recs):
     if "saved_recs" not in st.session_state:
         st.session_state.saved_recs = []
