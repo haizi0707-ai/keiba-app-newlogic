@@ -411,52 +411,78 @@ def draw_fit_text(draw, xy, text, font, fill, max_width):
 
 
 
+
 def make_sns_image(saved):
     items = [r for r in saved if float(r.get("参考信頼度", 0) or 0) >= 90.0]
     if not items:
         return None
 
-    # 競馬場ごと → 各競馬場内はR順で並べる
-    # 例: 福島11R, 福島12R, 東京7R, 東京8R, 東京9R...
-    track_order = {
-        "札幌": 1, "函館": 2,
-        "福島": 3, "新潟": 4,
-        "東京": 5, "中山": 6,
-        "中京": 7, "京都": 8, "阪神": 9,
-        "小倉": 10,
-    }
+    # 画像表示用の場所名・R番号を必ず作り直す
+    # 保存済みデータに「東京11R」のように場所+Rが混ざっていても、ここで正規化する
+    def clean_item(r):
+        rr = dict(r)
+        place_raw = norm_text(rr.get("場所", ""))
+        race_raw = norm_text(rr.get("レース", ""))
+        single_raw = norm_text(rr.get("単複おすすめ1", ""))
 
-    def normalize_place_for_sort(v):
-        s = norm_track(v)
-        for t in ["札幌","函館","福島","新潟","東京","中山","中京","京都","阪神","小倉"]:
-            if t in s:
-                return t
-        return s
+        # 場所にRが混ざっているケースを補正
+        m = re.search(r"(福島|新潟|東京|中山|中京|京都|阪神|小倉|札幌|函館)\s*(\d+)\s*R", place_raw)
+        if not m:
+            m = re.search(r"(福島|新潟|東京|中山|中京|京都|阪神|小倉|札幌|函館)\s*(\d+)\s*R", race_raw)
+        if m:
+            rr["場所"] = m.group(1)
+            rr["R"] = int(m.group(2))
+        else:
+            rr["場所"] = norm_track(place_raw)
+            try:
+                rr["R"] = int(float(rr.get("R", 0) or 0))
+            except Exception:
+                rr["R"] = 0
 
-    def normalize_r_for_sort(v):
+        # 馬番/馬名も念のため補正
         try:
-            return int(float(v))
+            rr["馬番"] = int(float(rr.get("馬番", 0) or 0))
         except Exception:
-            m = re.search(r"(\d+)\s*R", norm_text(v))
-            return int(m.group(1)) if m else 0
+            m2 = re.search(r"(\d+)", single_raw)
+            rr["馬番"] = int(m2.group(1)) if m2 else 0
 
-    for r in items:
-        r["場所"] = normalize_place_for_sort(r.get("場所", ""))
-        r["R"] = normalize_r_for_sort(r.get("R", 0))
+        rr["馬名"] = norm_text(rr.get("馬名", ""))
+        if not rr["馬名"] and single_raw:
+            rr["馬名"] = re.sub(r"^\d+\s*", "", single_raw)
+
+        rr["参考信頼度"] = float(rr.get("参考信頼度", 0) or 0)
+        return rr
+
+    items = [clean_item(r) for r in items]
+
+    # 競馬場ごと → R順で並べる
+    # JRAの並びに近い形。必要ならここだけ変更すればOK。
+    track_order = {
+        "福島": 1,
+        "東京": 2,
+        "京都": 3,
+        "阪神": 4,
+        "中山": 5,
+        "中京": 6,
+        "新潟": 7,
+        "小倉": 8,
+        "札幌": 9,
+        "函館": 10,
+    }
 
     items = sorted(
         items,
         key=lambda r: (
-            str(r.get("日付", "")),
-            track_order.get(str(r.get("場所", "")), 99),
-            int(r.get("R", 0) or 0)
+            track_order.get(norm_track(r.get("場所", "")), 99),
+            int(float(r.get("R", 0) or 0)),
+            int(float(r.get("馬番", 0) or 0)),
         )
     )
+
     date = str(items[0]["日付"])
 
     W = 1080
     row_h = 108
-    # 下部注記を削除した分、高さを少し圧縮
     H = max(1280, 285 + len(items) * row_h + 60)
     img = Image.new("RGB", (W, H), (250, 249, 245))
     draw = ImageDraw.Draw(img)
@@ -496,8 +522,7 @@ def make_sns_image(saved):
     for r in items:
         draw.rounded_rectangle((58, y, 1022, y + 84), radius=26, fill=white, outline=line, width=3)
 
-        # race badge
-        race_label = f'{r["場所"]}{int(float(r.get("R", 0) or 0))}R'
+        race_label = f'{norm_track(r["場所"])}{int(float(r.get("R", 0) or 0))}R'
         badge_x1, badge_y1, badge_x2, badge_y2 = 84, y + 18, 250, y + 66
         draw.rounded_rectangle((badge_x1, badge_y1, badge_x2, badge_y2), radius=15, fill=red)
         rb = draw.textbbox((0, 0), race_label, font=race_font)
@@ -509,15 +534,11 @@ def make_sns_image(saved):
             rw = rb[2] - rb[0]
         draw.text((badge_x1 + (badge_x2 - badge_x1 - rw) / 2, y + 22), race_label, font=rf, fill=white)
 
-        # 馬番はBOXなしで表示
         no_text = str(int(float(r.get("馬番", 0) or 0)))
-        nb = draw.textbbox((0, 0), no_text, font=horse_no_font)
         draw.text((292, y + 22), no_text, font=horse_no_font, fill=gold)
 
-        # horse name
         draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, 445)
 
-        # confidence
         conf = float(r.get("参考信頼度", 0) or 0)
         conf_text = f"{conf:.1f}%"
         cb = draw.textbbox((0, 0), conf_text, font=conf_font)
@@ -525,7 +546,6 @@ def make_sns_image(saved):
 
         y += row_h
 
-    # 下部注記は表示しない
     draw.line((70, H - 55, 1010, H - 55), fill=gold, width=3)
 
     bio = io.BytesIO()
@@ -551,14 +571,45 @@ def safe_race_no(row):
     return 0
 
 
+
 def add_saved_recs(new_recs):
     if "saved_recs" not in st.session_state:
         st.session_state.saved_recs = []
-    # key = 日付 + 場所 + R, update existing
-    store = {f'{r["日付"]}_{r["場所"]}_{r["R"]}': r for r in st.session_state.saved_recs}
+
+    cleaned = []
     for r in new_recs:
-        store[f'{r["日付"]}_{r["場所"]}_{r["R"]}'] = r
+        rr = dict(r)
+        place_raw = norm_text(rr.get("場所", ""))
+        m = re.search(r"(福島|新潟|東京|中山|中京|京都|阪神|小倉|札幌|函館)\s*(\d+)\s*R", place_raw)
+        if m:
+            rr["場所"] = m.group(1)
+            rr["R"] = int(m.group(2))
+        else:
+            rr["場所"] = norm_track(place_raw)
+            try:
+                rr["R"] = int(float(rr.get("R", 0) or 0))
+            except Exception:
+                rr["R"] = 0
+        cleaned.append(rr)
+
+    # key = 日付 + 場所 + R, update existing
+    store = {}
+    for r in st.session_state.saved_recs:
+        rr = dict(r)
+        place = norm_track(norm_text(rr.get("場所", "")))
+        try:
+            race_no = int(float(rr.get("R", 0) or 0))
+        except Exception:
+            race_no = 0
+        rr["場所"] = place
+        rr["R"] = race_no
+        store[f'{rr.get("日付","")}_{place}_{race_no}R'] = rr
+
+    for r in cleaned:
+        store[f'{r["日付"]}_{r["場所"]}_{r["R"]}R'] = r
+
     st.session_state.saved_recs = list(store.values())
+
 
 def saved_df():
     if "saved_recs" not in st.session_state:
