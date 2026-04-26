@@ -379,10 +379,16 @@ def render_rank_cards(g):
     components.html(html, height=height, scrolling=False)
 
 
+
 def get_font(size, bold=False):
+    # Streamlit Cloudでは packages.txt に fonts-noto-cjk を入れると下記Notoが使えます。
     candidates = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" if bold else "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansJP-Bold.otf" if bold else "/usr/share/fonts/opentype/noto/NotoSansJP-Regular.otf",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc" if bold else "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansJP-Bold.ttf" if bold else "/usr/share/fonts/truetype/noto/NotoSansJP-Regular.ttf",
+        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+        "/usr/share/fonts/truetype/arphic-bkai00mp/bkai00mp.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     for p in candidates:
@@ -402,77 +408,92 @@ def draw_fit_text(draw, xy, text, font, fill, max_width):
         t = t[:-1] + "…"
     draw.text((x,y), t, font=font, fill=fill)
 
+
 def make_sns_image(saved):
-    items = [r for r in saved if float(r.get("参考信頼度", 0)) >= 90.0]
+    items = [r for r in saved if float(r.get("参考信頼度", 0) or 0) >= 90.0]
     if not items:
         return None
+
     items = sorted(items, key=lambda r: (str(r["日付"]), str(r["場所"]), int(float(r.get("R", 0) or 0))))
     date = items[0]["日付"]
 
     W = 1080
-    H = max(1350, 260 + len(items) * 118 + 120)
-    img = Image.new("RGB", (W, H), (5, 16, 42))
+    row_h = 112
+    H = max(1350, 250 + len(items) * row_h + 130)
+    img = Image.new("RGB", (W, H), (250, 249, 245))
     draw = ImageDraw.Draw(img)
 
-    # gradient-ish bands
+    # soft warm background
     for y in range(H):
-        r = 5 + int(8 * y / H)
-        g = 16 + int(12 * y / H)
-        b = 42 + int(28 * y / H)
-        draw.line([(0,y),(W,y)], fill=(r,g,b))
+        shade = int(8 * y / H)
+        draw.line([(0, y), (W, y)], fill=(250 - shade, 249 - shade, 245 - shade))
 
-    title_font = get_font(68, True)
-    sub_font = get_font(26, False)
-    race_font = get_font(34, True)
-    horse_font = get_font(42, True)
+    title_font = get_font(66, True)
+    date_font = get_font(38, True)
+    race_font = get_font(36, True)
+    horse_font = get_font(44, True)
+    conf_font = get_font(24, True)
     small_font = get_font(24, False)
-    note_font = get_font(22, False)
+    note_font = get_font(25, False)
 
-    draw.text((70, 66), f"{date} 推奨馬", font=title_font, fill=(255,255,255))
-    draw.rounded_rectangle((70, 152, 1010, 158), radius=3, fill=(214,175,55))
+    navy = (16, 33, 65)
+    gold = (209, 166, 59)
+    red = (223, 55, 53)
+    gray = (92, 100, 116)
+    white = (255, 255, 255)
 
-    y = 215
+    # header
+    draw.rounded_rectangle((56, 48, 1024, 178), radius=34, fill=navy, outline=gold, width=4)
+    tw = draw.textbbox((0, 0), "本日の推奨馬", font=title_font)[2]
+    draw.text(((W - tw) / 2, 68), "本日の推奨馬", font=title_font, fill=white)
+    dt = f"{date}"
+    db = draw.textbbox((0, 0), dt, font=date_font)
+    draw.text(((W - (db[2] - db[0])) / 2, 138), dt, font=date_font, fill=(238, 224, 174))
+
+    y = 235
     for r in items:
-        draw.rounded_rectangle((62, y, 1018, y+92), radius=28, fill=(10, 31, 72), outline=(47,70,120), width=2)
-        label = f'{r["場所"]}{int(float(r.get("R", 0) or 0))}R'
-        draw.text((92, y+26), label, font=race_font, fill=(234, 214, 137))
-        draw.text((280, y+24), "🔥", font=horse_font, fill=(255, 90, 60))
-        draw.rounded_rectangle((352, y+18, 422, y+74), radius=16, fill=(214,175,55))
-        draw.text((374, y+26), str(int(r["馬番"])), font=race_font, fill=(5, 16, 42))
-        draw_fit_text(draw, (446, y+22), r["馬名"], horse_font, (255,255,255), 390)
-        conf = float(r.get("参考信頼度", 0))
-        draw.text((860, y+31), f"{conf:.1f}%", font=small_font, fill=(210,225,255))
-        y += 112
+        # row card
+        draw.rounded_rectangle((58, y, 1022, y + 86), radius=28, fill=white, outline=(225, 213, 181), width=3)
 
-    draw.text((70, H-72), "信頼度90%以上のみ掲載", font=note_font, fill=(185,196,220))
-    draw.text((70, H-42), "※保存済みの単複おすすめ1より作成", font=note_font, fill=(150,162,190))
+        # race red badge
+        race_label = f'{r["場所"]}{int(float(r.get("R", 0) or 0))}R'
+        draw.rounded_rectangle((84, y + 18, 232, y + 68), radius=16, fill=red)
+        draw_fit_text(draw, (104, y + 24), race_label, race_font, white, 112)
+
+        # horse number gold badge
+        draw.rounded_rectangle((256, y + 18, 342, y + 68), radius=16, fill=gold)
+        no_text = str(int(float(r.get("馬番", 0) or 0)))
+        nb = draw.textbbox((0, 0), no_text, font=race_font)
+        draw.text((256 + (86 - (nb[2]-nb[0]))/2, y + 22), no_text, font=race_font, fill=navy)
+
+        # horse name
+        draw_fit_text(draw, (375, y + 20), r["馬名"], horse_font, navy, 420)
+
+        # confidence
+        conf = float(r.get("参考信頼度", 0) or 0)
+        conf_text = f"{conf:.1f}%"
+        cb = draw.textbbox((0, 0), conf_text, font=conf_font)
+        draw.text((980 - (cb[2]-cb[0]), y + 30), conf_text, font=conf_font, fill=gray)
+
+        # short comment if exists: small secondary line when enough height not desired? keep hidden for readability if too many
+        if r.get("短評") and len(items) <= 8:
+            draw_fit_text(draw, (375, y + 61), str(r["短評"]), small_font, gray, 500)
+
+        y += row_h
+
+    # footer
+    draw.line((70, H - 105, 1010, H - 105), fill=gold, width=3)
+    foot = "信頼度90%以上のみ掲載"
+    fb = draw.textbbox((0, 0), foot, font=note_font)
+    draw.text(((W - (fb[2]-fb[0]))/2, H - 82), foot, font=note_font, fill=navy)
+    foot2 = "※保存済みの単複おすすめ1より作成"
+    f2b = draw.textbbox((0, 0), foot2, font=note_font)
+    draw.text(((W - (f2b[2]-f2b[0]))/2, H - 48), foot2, font=note_font, fill=gray)
+
     bio = io.BytesIO()
     img.save(bio, format="PNG")
     bio.seek(0)
     return bio
-
-
-def safe_race_no(row):
-    """raceNo が空/NaNでも、レース表記からR番号を復元する"""
-    try:
-        v = row.get("raceNo", np.nan)
-        if pd.notna(v):
-            return int(float(v))
-    except Exception:
-        pass
-
-    for key in ["レース", "raceLabel"]:
-        s = norm_text(row.get(key, ""))
-        m = re.search(r"(\d+)\s*R", s)
-        if m:
-            return int(m.group(1))
-
-    s = norm_text(row.get("raceName", ""))
-    m = re.search(r"(\d+)\s*R", s)
-    if m:
-        return int(m.group(1))
-
-    return 0
 
 def add_saved_recs(new_recs):
     if "saved_recs" not in st.session_state:
