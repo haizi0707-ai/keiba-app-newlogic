@@ -410,17 +410,32 @@ def draw_fit_text(draw, xy, text, font, fill, max_width):
 
 
 
+
 def make_sns_image(saved):
     items = [r for r in saved if float(r.get("参考信頼度", 0) or 0) >= 90.0]
     if not items:
         return None
 
-    items = sorted(items, key=lambda r: (str(r["日付"]), str(r["場所"]), int(float(r.get("R", 0) or 0))))
+    # 競馬場ごと → レース順で並べる
+    track_order = {
+        "札幌": 1, "函館": 2, "福島": 3, "新潟": 4, "東京": 5,
+        "中山": 6, "中京": 7, "京都": 8, "阪神": 9, "小倉": 10
+    }
+    def sort_key(r):
+        place = str(r.get("場所", ""))
+        return (
+            str(r.get("日付", "")),
+            track_order.get(place, 99),
+            int(float(r.get("R", 0) or 0))
+        )
+
+    items = sorted(items, key=sort_key)
     date = str(items[0]["日付"])
 
     W = 1080
     row_h = 108
-    H = max(1350, 285 + len(items) * row_h + 135)
+    # 下部注記を削除した分、高さを少し圧縮
+    H = max(1280, 285 + len(items) * row_h + 60)
     img = Image.new("RGB", (W, H), (250, 249, 245))
     draw = ImageDraw.Draw(img)
 
@@ -431,10 +446,9 @@ def make_sns_image(saved):
     title_font = get_font(58, True)
     date_font = get_font(38, True)
     race_font = get_font(34, True)
+    horse_no_font = get_font(38, True)
     horse_font = get_font(42, True)
     conf_font = get_font(24, True)
-    small_font = get_font(24, False)
-    note_font = get_font(25, False)
 
     navy = (16, 33, 65)
     gold = (209, 166, 59)
@@ -443,7 +457,7 @@ def make_sns_image(saved):
     line = (224, 211, 178)
     white = (255, 255, 255)
 
-    # header: title and date both inside the box, no overlap
+    # header
     header_x1, header_y1, header_x2, header_y2 = 56, 45, 1024, 195
     draw.rounded_rectangle((header_x1, header_y1, header_x2, header_y2), radius=34, fill=navy, outline=gold, width=4)
 
@@ -454,20 +468,18 @@ def make_sns_image(saved):
     db = draw.textbbox((0, 0), date, font=date_font)
     draw.text(((W - (db[2] - db[0])) / 2, 132), date, font=date_font, fill=(238, 224, 174))
 
-    # divider
     draw.line((70, 235, 1010, 235), fill=gold, width=4)
 
     y = 282
     for r in items:
         draw.rounded_rectangle((58, y, 1022, y + 84), radius=26, fill=white, outline=line, width=3)
 
-        # race badge: wider so 京都7R / 東京11R / 福島12R are never clipped
+        # race badge
         race_label = f'{r["場所"]}{int(float(r.get("R", 0) or 0))}R'
         badge_x1, badge_y1, badge_x2, badge_y2 = 84, y + 18, 250, y + 66
         draw.rounded_rectangle((badge_x1, badge_y1, badge_x2, badge_y2), radius=15, fill=red)
         rb = draw.textbbox((0, 0), race_label, font=race_font)
         rw = rb[2] - rb[0]
-        # if still too wide, use smaller font just for this label
         rf = race_font
         if rw > (badge_x2 - badge_x1 - 18):
             rf = get_font(30, True)
@@ -475,15 +487,13 @@ def make_sns_image(saved):
             rw = rb[2] - rb[0]
         draw.text((badge_x1 + (badge_x2 - badge_x1 - rw) / 2, y + 22), race_label, font=rf, fill=white)
 
-        # horse number gold badge
-        no_x1, no_y1, no_x2, no_y2 = 275, y + 18, 356, y + 66
-        draw.rounded_rectangle((no_x1, no_y1, no_x2, no_y2), radius=15, fill=gold)
+        # 馬番はBOXなしで表示
         no_text = str(int(float(r.get("馬番", 0) or 0)))
-        nb = draw.textbbox((0, 0), no_text, font=race_font)
-        draw.text((no_x1 + ((no_x2-no_x1) - (nb[2]-nb[0]))/2, y + 21), no_text, font=race_font, fill=navy)
+        nb = draw.textbbox((0, 0), no_text, font=horse_no_font)
+        draw.text((292, y + 22), no_text, font=horse_no_font, fill=gold)
 
         # horse name
-        draw_fit_text(draw, (385, y + 19), r["馬名"], horse_font, navy, 405)
+        draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, 445)
 
         # confidence
         conf = float(r.get("参考信頼度", 0) or 0)
@@ -491,19 +501,10 @@ def make_sns_image(saved):
         cb = draw.textbbox((0, 0), conf_text, font=conf_font)
         draw.text((980 - (cb[2]-cb[0]), y + 30), conf_text, font=conf_font, fill=gray)
 
-        # short comment only when row count is low enough
-        if r.get("短評") and len(items) <= 7:
-            draw_fit_text(draw, (385, y + 58), str(r["短評"]), small_font, gray, 500)
-
         y += row_h
 
-    draw.line((70, H - 105, 1010, H - 105), fill=gold, width=3)
-    foot = "信頼度90%以上のみ掲載"
-    fb = draw.textbbox((0, 0), foot, font=note_font)
-    draw.text(((W - (fb[2]-fb[0]))/2, H - 82), foot, font=note_font, fill=navy)
-    foot2 = "※保存済みの単複おすすめ1より作成"
-    f2b = draw.textbbox((0, 0), foot2, font=note_font)
-    draw.text(((W - (f2b[2]-f2b[0]))/2, H - 48), foot2, font=note_font, fill=gray)
+    # 下部注記は表示しない
+    draw.line((70, H - 55, 1010, H - 55), fill=gold, width=3)
 
     bio = io.BytesIO()
     img.save(bio, format="PNG")
