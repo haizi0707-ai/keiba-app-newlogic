@@ -416,20 +416,42 @@ def make_sns_image(saved):
     if not items:
         return None
 
-    # 競馬場ごと → レース順で並べる
+    # 競馬場ごと → 各競馬場内はR順で並べる
+    # 例: 福島11R, 福島12R, 東京7R, 東京8R, 東京9R...
     track_order = {
-        "札幌": 1, "函館": 2, "福島": 3, "新潟": 4, "東京": 5,
-        "中山": 6, "中京": 7, "京都": 8, "阪神": 9, "小倉": 10
+        "札幌": 1, "函館": 2,
+        "福島": 3, "新潟": 4,
+        "東京": 5, "中山": 6,
+        "中京": 7, "京都": 8, "阪神": 9,
+        "小倉": 10,
     }
-    def sort_key(r):
-        place = str(r.get("場所", ""))
-        return (
-            str(r.get("日付", "")),
-            track_order.get(place, 99),
-            int(float(r.get("R", 0) or 0))
-        )
 
-    items = sorted(items, key=sort_key)
+    def normalize_place_for_sort(v):
+        s = norm_track(v)
+        for t in ["札幌","函館","福島","新潟","東京","中山","中京","京都","阪神","小倉"]:
+            if t in s:
+                return t
+        return s
+
+    def normalize_r_for_sort(v):
+        try:
+            return int(float(v))
+        except Exception:
+            m = re.search(r"(\d+)\s*R", norm_text(v))
+            return int(m.group(1)) if m else 0
+
+    for r in items:
+        r["場所"] = normalize_place_for_sort(r.get("場所", ""))
+        r["R"] = normalize_r_for_sort(r.get("R", 0))
+
+    items = sorted(
+        items,
+        key=lambda r: (
+            str(r.get("日付", "")),
+            track_order.get(str(r.get("場所", "")), 99),
+            int(r.get("R", 0) or 0)
+        )
+    )
     date = str(items[0]["日付"])
 
     W = 1080
@@ -596,7 +618,7 @@ else:
 
             current_recs.append({
                 "日付": single["date"],
-                "場所": single["場所"],
+                "場所": norm_track(single["場所"]),
                 "R": safe_race_no(single),
                 "馬番": int(single["horseNo"]),
                 "馬名": single["horseName"],
