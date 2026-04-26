@@ -406,7 +406,7 @@ def make_sns_image(saved):
     items = [r for r in saved if float(r.get("参考信頼度", 0)) >= 90.0]
     if not items:
         return None
-    items = sorted(items, key=lambda r: (str(r["日付"]), str(r["場所"]), int(r["R"])))
+    items = sorted(items, key=lambda r: (str(r["日付"]), str(r["場所"]), int(float(r.get("R", 0) or 0))))
     date = items[0]["日付"]
 
     W = 1080
@@ -434,7 +434,7 @@ def make_sns_image(saved):
     y = 215
     for r in items:
         draw.rounded_rectangle((62, y, 1018, y+92), radius=28, fill=(10, 31, 72), outline=(47,70,120), width=2)
-        label = f'{r["場所"]}{int(r["R"])}R'
+        label = f'{r["場所"]}{int(float(r.get("R", 0) or 0))}R'
         draw.text((92, y+26), label, font=race_font, fill=(234, 214, 137))
         draw.text((280, y+24), "🔥", font=horse_font, fill=(255, 90, 60))
         draw.rounded_rectangle((352, y+18, 422, y+74), radius=16, fill=(214,175,55))
@@ -450,6 +450,29 @@ def make_sns_image(saved):
     img.save(bio, format="PNG")
     bio.seek(0)
     return bio
+
+
+def safe_race_no(row):
+    """raceNo が空/NaNでも、レース表記からR番号を復元する"""
+    try:
+        v = row.get("raceNo", np.nan)
+        if pd.notna(v):
+            return int(float(v))
+    except Exception:
+        pass
+
+    for key in ["レース", "raceLabel"]:
+        s = norm_text(row.get(key, ""))
+        m = re.search(r"(\d+)\s*R", s)
+        if m:
+            return int(m.group(1))
+
+    s = norm_text(row.get("raceName", ""))
+    m = re.search(r"(\d+)\s*R", s)
+    if m:
+        return int(m.group(1))
+
+    return 0
 
 def add_saved_recs(new_recs):
     if "saved_recs" not in st.session_state:
@@ -519,7 +542,7 @@ else:
             current_recs.append({
                 "日付": single["date"],
                 "場所": single["場所"],
-                "R": int(single["raceNo"]),
+                "R": safe_race_no(single),
                 "馬番": int(single["horseNo"]),
                 "馬名": single["horseName"],
                 "単複おすすめ1": f'{int(single["horseNo"])} {single["horseName"]}',
