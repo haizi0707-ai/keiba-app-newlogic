@@ -141,14 +141,37 @@ straightEval: 直線相性評価。候補は「かなり向く」「向く」「
 ・前走3角/4角通過順をカテゴリ化すること
 ・{bias_text}
 ・オッズ、人気による補正はしないこと
-・推測で雑に埋めないこと
-・ただしアプリ投入のため主要列は最大限埋めること
+・「不明」「unknown」「空欄」は禁止
+・どうしても厳密値が取れない場合は、アプリ計算用の安全な初期値で埋めること
+・prevTrackは取れなければ今回場所、prevSurfaceは今回surface、prevDistanceは今回distanceで埋めること
+・prev3cCat/prev4cCatが取れなければ「4-6番手」で埋めること
+・prevStraight/prev2Straightが取れなければ50で埋めること
+・paceEval/straightEvalが取れなければ「普通」で埋めること
+・主要列は必ず全行埋めること
+
+【検索・確認手順】
+・JRA公式、netkeiba、Yahoo競馬、競馬ブック等の公開情報を横断して確認すること
+・まず出馬表で全頭の馬番と馬名を確定すること
+・次に各馬の前走/前々走情報を確認すること
+・前走3角/4角通過順が見つからない場合は、別ページでレース結果/通過順を再検索すること
+・全頭の必須列が埋まるまで回答しないこと
+・不明な項目が1つでもある場合は、追加検索してからCSVを完成させること
+
+【品質チェック】
+回答前に以下を内部確認すること。
+・全頭のhorseNoが重複していない
+・horseNameが全て正式な日本語馬名
+・raceName/surface/distanceが全行で埋まっている
+・prevTrack/prevSurface/prevDistanceが全行で埋まっている
+・prev3cCat/prev4cCatが全行で指定カテゴリになっている
+・prevStraight/prev2Straightが全行で0〜100の数値
+・paceEval/straightEvalが全行で指定候補になっている
 
 【最終出力】
-CSV本文のみ。
+CSV本文のみ。Markdown表、説明文、補足、コードブロックは禁止。ヘッダーとデータ行だけを返すこと。
 """
 
-def call_gemini_with_search(prompt, model_name="gemini-2.5-flash-lite", use_search=True, retry_no_search=True):
+def call_gemini_with_search(prompt, model_name="gemini-2.5-flash", use_search=True, retry_no_search=True):
     """Gemini API。429対策として検索なしフォールバックも可能。"""
     if genai is None or types is None:
         raise RuntimeError("google-genai が読み込めません。requirements.txt に google-genai が入っているか確認してください。")
@@ -195,11 +218,445 @@ def call_gemini_with_search(prompt, model_name="gemini-2.5-flash-lite", use_sear
                 )
         raise
 
+
+REQUIRED_GEMINI_COLS = [
+    "date","場所","raceNo","raceName","horseNo","horseName","distance","surface",
+    "prevTrack","prevSurface","prevDistance","prev3cCat","prev4cCat",
+    "prevStraight","prev2Straight","paceEval","straightEval"
+]
+
+def extract_csv_block(text_value):
+    """Geminiが説明文やMarkdownを混ぜてもCSV部分だけ抜き出す"""
+    s = strip_code_fence(text_value)
+    if not s:
+        return ""
+
+    # Markdown tableの場合
+    if "|" in s and "horseName" in s:
+        lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+        table_lines = [ln for ln in lines if "|" in ln]
+        if table_lines:
+            cleaned_rows = []
+            for ln in table_lines:
+                if re.match(r"^\|?\s*:?-{3,}", ln):
+                    continue
+                parts = [p.strip() for p in ln.strip("|").split("|")]
+                if len(parts) >= 10:
+                    cleaned_rows.append(",".join([p.replace(",", "、") for p in parts]))
+            if cleaned_rows:
+                return "\n".join(cleaned_rows)
+
+    lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+    header_idx = None
+    for i, ln in enumerate(lines):
+        normalized = ln.replace(" ", "")
+        if ("date" in normalized and "horseName" in normalized and ("raceNo" in normalized or "raceNo" in ln)):
+            header_idx = i
+            break
+        if ("日付" in normalized and "馬名" in normalized and "馬番" in normalized):
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return s
+
+    csv_lines = []
+    for ln in lines[header_idx:]:
+        # 余計な説明行を除外
+        if ln.startswith("```"):
+            continue
+        if ln.startswith("説明") or ln.startswith("補足") or ln.startswith("注意"):
+            continue
+        # カンマ区切り行だけ優先
+        if "," in ln:
+            csv_lines.append(ln)
+    return "\n".join(csv_lines).strip()
+
+
 def gemini_csv_to_df(csv_text):
-    cleaned = strip_code_fence(csv_text)
+    cleaned = extract_csv_block(csv_text)
     if not cleaned:
         raise ValueError("GeminiからCSV本文が返りませんでした。")
-    return pd.read_csv(io.StringIO(cleaned))
+
+    try:
+        df = pd.read_csv(io.StringIO(cleaned))
+    except Exception:
+        df = pd.read_csv(io.StringIO(cleaned), engine="python", on_bad_lines="skip")
+
+    df.columns = [norm_text(c) for c in df.columns]
+
+    rename_map = {
+        "日付": "date", "競馬場": "場所", "R": "raceNo", "レース番号": "raceNo",
+        "レース名": "raceName", "馬番": "horseNo", "馬名": "horseName",
+        "距離": "distance", "芝ダ": "surface", "芝・ダ": "surface",
+        "前走競馬場": "prevTrack", "前走場所": "prevTrack",
+        "前走芝ダ": "prevSurface", "前走距離": "prevDistance",
+        "前走3角": "prev3cCat", "前走3角カテゴリ": "prev3cCat",
+        "前走4角": "prev4cCat", "前走4角カテゴリ": "prev4cCat",
+        "前走直線ロジック点": "prevStraight",
+        "前々走直線ロジック点": "prev2Straight",
+        "展開予想評価": "paceEval",
+        "直線相性評価": "straightEval",
+    }
+    df = df.rename(columns={c: rename_map.get(c, c) for c in df.columns})
+
+    for col in REQUIRED_GEMINI_COLS:
+        if col not in df.columns:
+            df[col] = ""
+
+    df = df[REQUIRED_GEMINI_COLS].copy()
+
+    # 馬名が完全に空の行だけ除外。不明は後で補完/警告対象にする。
+    df = df[df["horseName"].astype(str).str.strip() != ""].copy()
+    if df.empty:
+        raise ValueError("Gemini CSVを読み込めましたが、馬名行がありません。")
+
+    return df
+
+def _is_unknown(v):
+    s = norm_text(v).lower()
+    return s in ["", "不明", "unknown", "nan", "none", "null", "-", "ー"]
+
+def _clean_number(v, default_value):
+    try:
+        if _is_unknown(v):
+            return default_value
+        s = re.sub(r"[^0-9.]", "", str(v))
+        if s == "":
+            return default_value
+        return int(float(s))
+    except Exception:
+        return default_value
+
+def _valid_cat(v):
+    s = norm_text(v)
+    valid = ["1番手", "2-3番手", "4-6番手", "7-10番手", "11番手以下"]
+    if s in valid:
+        return s
+    # 数字だけ返ってきた場合のカテゴリ化
+    nums = re.findall(r"\d+", s)
+    if nums:
+        n = int(nums[0])
+        if n <= 1:
+            return "1番手"
+        if n <= 3:
+            return "2-3番手"
+        if n <= 6:
+            return "4-6番手"
+        if n <= 10:
+            return "7-10番手"
+        return "11番手以下"
+    return "4-6番手"
+
+def _valid_eval(v):
+    s = norm_text(v)
+    valid = ["かなり向く", "向く", "普通", "やや不向き", "不向き"]
+    return s if s in valid else "普通"
+
+def complete_gemini_df(df, date, place, race_no):
+    """Gemini出力の空欄/不明をアプリ用に完全補完する"""
+    out = df.copy()
+
+    # 基本情報
+    out["date"] = out["date"].apply(lambda v: date if _is_unknown(v) else norm_text(v))
+    out["場所"] = out["場所"].apply(lambda v: place if _is_unknown(v) else norm_track(v))
+    out["raceNo"] = out["raceNo"].apply(lambda v: _clean_number(v, int(race_no)))
+
+    # レース名は空ならプレースホルダー。ただし空欄/不明は残さない。
+    out["raceName"] = out["raceName"].apply(lambda v: f"{place}{int(race_no)}R" if _is_unknown(v) else norm_text(v))
+
+    # 馬番/馬名
+    out["horseNo"] = out["horseNo"].apply(lambda v: _clean_number(v, 0))
+    # 馬名は不明のままだと使えないので、最終手段で「馬番◯」にする
+    out["horseName"] = out.apply(
+        lambda r: f'馬番{int(r["horseNo"])}' if _is_unknown(r["horseName"]) else norm_text(r["horseName"]),
+        axis=1
+    )
+
+    # 今回条件。1行でも取得できている値を優先して全体補完
+    known_surface = ""
+    for v in out["surface"].tolist():
+        sv = norm_surface(v)
+        if sv in ["芝", "ダ"]:
+            known_surface = sv
+            break
+    if not known_surface:
+        known_surface = "芝"
+
+    known_distance = None
+    for v in out["distance"].tolist():
+        dv = _clean_number(v, 0)
+        if dv > 0:
+            known_distance = dv
+            break
+    if known_distance is None:
+        known_distance = 1600
+
+    out["surface"] = out["surface"].apply(lambda v: known_surface if _is_unknown(v) or norm_surface(v) not in ["芝", "ダ"] else norm_surface(v))
+    out["distance"] = out["distance"].apply(lambda v: _clean_number(v, known_distance))
+
+    # 前走条件。取れなければ今回条件で補完
+    out["prevTrack"] = out["prevTrack"].apply(lambda v: place if _is_unknown(v) else norm_track(v))
+    out["prevSurface"] = out["prevSurface"].apply(lambda v: known_surface if _is_unknown(v) or norm_surface(v) not in ["芝", "ダ"] else norm_surface(v))
+    out["prevDistance"] = out["prevDistance"].apply(lambda v: _clean_number(v, known_distance))
+
+    # カテゴリ/点/評価
+    out["prev3cCat"] = out["prev3cCat"].apply(_valid_cat)
+    out["prev4cCat"] = out["prev4cCat"].apply(_valid_cat)
+    out["prevStraight"] = out["prevStraight"].apply(lambda v: max(0, min(100, _clean_number(v, 50))))
+    out["prev2Straight"] = out["prev2Straight"].apply(lambda v: max(0, min(100, _clean_number(v, 50))))
+    out["paceEval"] = out["paceEval"].apply(_valid_eval)
+    out["straightEval"] = out["straightEval"].apply(_valid_eval)
+
+    # 馬番0の行は最後に除外。全頭取得ミスの可能性があるが、アプリ崩壊は防ぐ。
+    out = out[out["horseNo"] > 0].copy()
+
+    if out.empty:
+        raise ValueError("補完後も有効な馬番行がありません。")
+
+    return out[REQUIRED_GEMINI_COLS].copy()
+
+def has_unknown_cells(df):
+    for col in REQUIRED_GEMINI_COLS:
+        if col not in df.columns:
+            return True
+        if df[col].apply(_is_unknown).any():
+            return True
+    return False
+
+def build_gemini_repair_prompt(raw_text, date, place, race_no):
+    return f"""
+以下の内容を、競馬ランクアプリ用のCSV本文だけに修正してください。
+説明文、補足、Markdown、コードブロックは禁止です。
+
+【対象】
+日付: {date}
+場所: {place}
+R: {race_no}R
+
+【必須ヘッダー】
+date,場所,raceNo,raceName,horseNo,horseName,distance,surface,prevTrack,prevSurface,prevDistance,prev3cCat,prev4cCat,prevStraight,prev2Straight,paceEval,straightEval
+
+【絶対ルール】
+・ヘッダーは上記と完全一致
+・全出走馬を1行ずつ出す
+・カンマ区切りCSVにする
+・項目内にカンマを入れない。必要なら読点「、」に置換
+・「不明」「unknown」「空欄」は禁止
+・raceNoは数字のみ
+・raceName、surface、distanceは必ず埋める
+・surfaceは「芝」または「ダ」
+・prevTrackが取れなければ {place}
+・prevSurfaceが取れなければ surface と同じ
+・prevDistanceが取れなければ distance と同じ
+・prev3cCat/prev4cCatは「1番手」「2-3番手」「4-6番手」「7-10番手」「11番手以下」のどれか。取れなければ「4-6番手」
+・prevStraight/prev2Straightは0〜100。取れなければ50
+・paceEval/straightEvalは「かなり向く」「向く」「普通」「やや不向き」「不向き」のどれか。取れなければ「普通」
+
+【修正元】
+{raw_text}
+"""
+
+
+def fill_race_level_fields_only(df, date, place, race_no):
+    """レース単位で共通の項目だけ、同レース内の取得値から補完する。馬ごとの前走情報は安全補完しない。"""
+    out = df.copy()
+    for col in REQUIRED_GEMINI_COLS:
+        if col not in out.columns:
+            out[col] = ""
+
+    out["date"] = out["date"].apply(lambda v: date if _is_unknown(v) else norm_text(v))
+    out["場所"] = out["場所"].apply(lambda v: place if _is_unknown(v) else norm_track(v))
+    out["raceNo"] = out["raceNo"].apply(lambda v: _clean_number(v, int(race_no)))
+
+    # raceNameは1行でも取得できていれば全行へ展開。なければ厳密モードではNG扱いにする。
+    known_race_name = ""
+    for v in out["raceName"].tolist():
+        if not _is_unknown(v):
+            known_race_name = norm_text(v)
+            break
+    if known_race_name:
+        out["raceName"] = out["raceName"].apply(lambda v: known_race_name if _is_unknown(v) else norm_text(v))
+
+    known_surface = ""
+    for v in out["surface"].tolist():
+        sv = norm_surface(v)
+        if sv in ["芝", "ダ"]:
+            known_surface = sv
+            break
+    if known_surface:
+        out["surface"] = out["surface"].apply(lambda v: known_surface if _is_unknown(v) or norm_surface(v) not in ["芝", "ダ"] else norm_surface(v))
+
+    known_distance = None
+    for v in out["distance"].tolist():
+        dv = _clean_number(v, 0)
+        if dv > 0:
+            known_distance = dv
+            break
+    if known_distance is not None:
+        out["distance"] = out["distance"].apply(lambda v: known_distance if _clean_number(v, 0) <= 0 else _clean_number(v, known_distance))
+
+    return out[REQUIRED_GEMINI_COLS].copy()
+
+def strict_validate_gemini_df(df, date, place, race_no):
+    """
+    主要列が正しく取得できているか検証。
+    不明や安全補完に頼る状態ならFalseを返して再検索させる。
+    """
+    errors = []
+    if df is None or df.empty:
+        return False, ["データ行が空です"]
+
+    d = fill_race_level_fields_only(df, date, place, race_no)
+
+    # レース共通項目
+    for col in ["raceName", "surface", "distance"]:
+        if d[col].apply(_is_unknown).any():
+            errors.append(f"{col}に不明があります")
+
+    # 馬番・馬名
+    if d["horseNo"].apply(lambda v: _clean_number(v, 0) <= 0).any():
+        errors.append("horseNoに不正値があります")
+    if d["horseName"].apply(_is_unknown).any():
+        errors.append("horseNameに不明があります")
+    try:
+        nums = d["horseNo"].apply(lambda v: _clean_number(v, 0)).tolist()
+        if len(nums) != len(set(nums)):
+            errors.append("horseNoが重複しています")
+    except Exception:
+        errors.append("horseNo重複チェック不可")
+
+    # 馬ごとの前走情報は厳密に要求
+    row_required = ["prevTrack", "prevSurface", "prevDistance", "prev3cCat", "prev4cCat", "prevStraight", "prev2Straight", "paceEval", "straightEval"]
+    for col in row_required:
+        if d[col].apply(_is_unknown).any():
+            errors.append(f"{col}に不明があります")
+
+    # 値の形式
+    if d["prevSurface"].apply(lambda v: norm_surface(v) not in ["芝", "ダ"]).any():
+        errors.append("prevSurfaceに芝/ダ以外があります")
+    if d["surface"].apply(lambda v: norm_surface(v) not in ["芝", "ダ"]).any():
+        errors.append("surfaceに芝/ダ以外があります")
+    if d["prevDistance"].apply(lambda v: _clean_number(v, 0) <= 0).any():
+        errors.append("prevDistanceに不正値があります")
+    if d["distance"].apply(lambda v: _clean_number(v, 0) <= 0).any():
+        errors.append("distanceに不正値があります")
+
+    valid_cats = ["1番手", "2-3番手", "4-6番手", "7-10番手", "11番手以下"]
+    for col in ["prev3cCat", "prev4cCat"]:
+        bad = d[col].apply(lambda v: _valid_cat(v) not in valid_cats)
+        if bad.any():
+            errors.append(f"{col}にカテゴリ外があります")
+
+    valid_evals = ["かなり向く", "向く", "普通", "やや不向き", "不向き"]
+    for col in ["paceEval", "straightEval"]:
+        bad = d[col].apply(lambda v: _valid_eval(v) not in valid_evals)
+        if bad.any():
+            errors.append(f"{col}に評価候補外があります")
+
+    # 直線点は不明でなく、数値化できること
+    for col in ["prevStraight", "prev2Straight"]:
+        vals = d[col].apply(lambda v: _clean_number(v, -1))
+        if (vals < 0).any():
+            errors.append(f"{col}に数値化不可があります")
+
+    return len(errors) == 0, errors
+
+def build_gemini_strict_retry_prompt(date, place, race_no, validation_errors):
+    err_text = " / ".join(validation_errors[:10])
+    return f"""
+あなたは競馬予想データ作成AIです。
+前回の出力は検証で失敗しました。
+
+【対象】
+日付: {date}
+場所: {place}
+R: {race_no}R
+
+【失敗理由】
+{err_text}
+
+【再検索指示】
+JRA公式、netkeiba、Yahoo競馬、競馬ブック等の公開情報を横断し、
+出馬表・近走成績・通過順を再確認してください。
+特に前走3角/4角通過順、前走競馬場、前走距離、前々走内容を再検索してください。
+
+【必須ヘッダー】
+date,場所,raceNo,raceName,horseNo,horseName,distance,surface,prevTrack,prevSurface,prevDistance,prev3cCat,prev4cCat,prevStraight,prev2Straight,paceEval,straightEval
+
+【絶対ルール】
+・CSV本文のみ
+・Markdown表、説明文、補足、コードブロックは禁止
+・「不明」「unknown」「空欄」は禁止
+・全出走馬を1行ずつ
+・全列を必ず埋める
+・prev3cCat/prev4cCatは「1番手」「2-3番手」「4-6番手」「7-10番手」「11番手以下」のどれか
+・paceEval/straightEvalは「かなり向く」「向く」「普通」「やや不向き」「不向き」のどれか
+"""
+
+def fetch_one_race_with_gemini(date, place, race_no, use_day_bias, model_name, retry_no_search, max_attempts=6):
+    """1レースを厳密取得。主要列に不明が残る場合は最大6回まで再検索する。"""
+    last_error = None
+    last_errors = []
+
+    for attempt in range(1, max_attempts + 1):
+        if attempt == 1:
+            prompt = build_gemini_prediction_prompt(date, place, int(race_no), use_day_bias=use_day_bias)
+            search_enabled = use_day_bias
+        else:
+            prompt = build_gemini_strict_retry_prompt(date, place, int(race_no), last_errors or ["主要列の取得不足"])
+            # 2回目以降も検索を使う。ただし429時は既存のfallbackが効く
+            search_enabled = use_day_bias
+
+        raw = ""
+        try:
+            raw = call_gemini_with_search(
+                prompt,
+                model_name=model_name,
+                use_search=search_enabled,
+                retry_no_search=retry_no_search,
+            )
+
+            df = gemini_csv_to_df(raw)
+            df = fill_race_level_fields_only(df, date, place, int(race_no))
+
+            ok, validation_errors = strict_validate_gemini_df(df, date, place, int(race_no))
+            if not ok:
+                last_errors = validation_errors
+                last_error = ValueError(" / ".join(validation_errors[:10]))
+
+                # 返答がある場合は修復プロンプトも試す
+                try:
+                    repair_prompt = build_gemini_repair_prompt(raw, date, place, int(race_no))
+                    repaired = call_gemini_with_search(
+                        repair_prompt,
+                        model_name=model_name,
+                        use_search=False,
+                        retry_no_search=False,
+                    )
+                    repaired_df = gemini_csv_to_df(repaired)
+                    repaired_df = fill_race_level_fields_only(repaired_df, date, place, int(race_no))
+                    ok2, validation_errors2 = strict_validate_gemini_df(repaired_df, date, place, int(race_no))
+                    if ok2:
+                        final_df = complete_gemini_df(repaired_df, date, place, int(race_no))
+                        return final_df, repaired, None
+                    last_errors = validation_errors2
+                    last_error = ValueError(" / ".join(validation_errors2[:10]))
+                except Exception as repair_e:
+                    last_error = repair_e
+
+                time.sleep(3 * attempt)
+                continue
+
+            final_df = complete_gemini_df(df, date, place, int(race_no))
+            return final_df, raw, None
+
+        except Exception as e:
+            last_error = e
+            last_errors = [str(e)]
+            time.sleep(3 * attempt)
+
+    return None, "", last_error
 
 
 def parse_race_label(v):
@@ -1213,8 +1670,9 @@ with st.expander("Gemini APIで自動予想", expanded=False):
         auto_race_no = st.number_input("単発R", min_value=1, max_value=12, value=11, step=1, key="auto_race_no")
 
     use_day_bias = st.checkbox("馬場・TB検索込み", value=True)
-    model_name = st.text_input("Gemini model", value="gemini-2.5-flash-lite")
+    model_name = st.text_input("Gemini model", value="gemini-2.5-flash")
     retry_no_search = st.checkbox("429時は検索なしで再試行", value=True)
+    strict_attempts = st.number_input("厳密取得の最大再試行回数", min_value=3, max_value=10, value=6, step=1)
 
     st.markdown("#### 単発予想")
     if st.button("この1レースを全自動予想", type="primary"):
@@ -1223,8 +1681,16 @@ with st.expander("Gemini APIで自動予想", expanded=False):
         )
         try:
             with st.spinner("Geminiでレース名・芝ダ・距離・出走馬・馬場TBを検索してCSVを作成中です..."):
-                csv_data = call_gemini_with_search(prompt, model_name=model_name, use_search=use_day_bias, retry_no_search=retry_no_search)
-                st.session_state.auto_df = gemini_csv_to_df(csv_data)
+                one_df, csv_data, err = fetch_one_race_with_gemini(
+                    auto_date, auto_place, int(auto_race_no),
+                    use_day_bias=use_day_bias,
+                    model_name=model_name,
+                    retry_no_search=retry_no_search,
+                    max_attempts=int(strict_attempts),
+                )
+                if err is not None:
+                    raise err
+                st.session_state.auto_df = one_df
             st.success("Gemini予想CSVを作成しました。下のランキングに反映します。")
             with st.expander("Gemini生成CSVを確認"):
                 st.dataframe(st.session_state.auto_df, use_container_width=True)
@@ -1247,7 +1713,7 @@ with st.expander("Gemini APIで自動予想", expanded=False):
     with b2:
         batch_end = st.number_input("終了R", min_value=1, max_value=12, value=12, step=1, key="batch_end")
     with b3:
-        batch_sleep = st.number_input("実行間隔 秒", min_value=0, max_value=60, value=5, step=1, key="batch_sleep")
+        batch_sleep = st.number_input("実行間隔 秒", min_value=0, max_value=120, value=20, step=1, key="batch_sleep")
 
     if st.button("7〜12Rを一気に全自動予想"):
         if int(batch_start) > int(batch_end):
@@ -1265,18 +1731,22 @@ with st.expander("Gemini APIで自動予想", expanded=False):
                     auto_date, auto_place, int(rn), use_day_bias=use_day_bias
                 )
                 try:
-                    csv_data = call_gemini_with_search(
-                        prompt,
+                    one_df, csv_data, err = fetch_one_race_with_gemini(
+                        auto_date,
+                        auto_place,
+                        int(rn),
+                        use_day_bias=use_day_bias,
                         model_name=model_name,
-                        use_search=use_day_bias,
                         retry_no_search=retry_no_search,
+                        max_attempts=int(strict_attempts),
                     )
-                    one_df = gemini_csv_to_df(csv_data)
+                    if err is not None:
+                        raise err
                     dfs.append(one_df)
                     st.success(f"{auto_place}{rn}R 完了")
                 except Exception as e:
                     errors.append(f"{auto_place}{rn}R: {str(e)}")
-                    st.warning(f"{auto_place}{rn}R は取得できませんでした。次へ進みます。")
+                    st.warning(f"{auto_place}{rn}R は取得できませんでした。再試行後も失敗したため次へ進みます。")
 
                 progress.progress(i / len(race_nums))
                 if i < len(race_nums) and int(batch_sleep) > 0:
