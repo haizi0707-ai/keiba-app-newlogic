@@ -3,6 +3,7 @@ import os
 import re
 import io
 import unicodedata
+import time
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -147,26 +148,52 @@ straightEval: 直線相性評価。候補は「かなり向く」「向く」「
 CSV本文のみ。
 """
 
-def call_gemini_with_search(prompt, model_name="gemini-2.0-flash"):
-    """Gemini API + Google Search grounding"""
+def call_gemini_with_search(prompt, model_name="gemini-2.5-flash-lite", use_search=True, retry_no_search=True):
+    """Gemini API。429対策として検索なしフォールバックも可能。"""
     if genai is None or types is None:
         raise RuntimeError("google-genai が読み込めません。requirements.txt に google-genai が入っているか確認してください。")
 
     api_key = get_gemini_api_key()
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY が設定されていません。Streamlit Cloud の Secrets に GEMINI_API_KEY を設定してください。")
+        raise RuntimeError("GEMINI_API_KEY が設定されていません。アプリ内入力欄、またはStreamlit Secretsに設定してください。")
 
     client = genai.Client(api_key=api_key)
 
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-            temperature=0.2,
-        ),
-    )
-    return response.text or ""
+    def _generate(search_enabled):
+        if search_enabled:
+            config = types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.2,
+            )
+        else:
+            config = types.GenerateContentConfig(
+                temperature=0.2,
+            )
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=config,
+        )
+        return response.text or ""
+
+    try:
+        return _generate(use_search)
+    except Exception as e:
+        msg = str(e)
+        # 429は無料枠/レート制限/検索グラウンディング制限の可能性が高い。
+        if ("429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()) and retry_no_search and use_search:
+            time.sleep(3)
+            try:
+                st.warning("Geminiの検索付き実行が429制限に達しました。検索なしで1回だけ再試行します。")
+                return _generate(False)
+            except Exception as e2:
+                raise RuntimeError(
+                    "Gemini APIが429 RESOURCE_EXHAUSTEDになりました。"
+                    "無料枠・レート制限・検索グラウンディングの上限に達している可能性があります。"
+                    "時間を置く、検索なしにする、modelをflash-liteにする、または課金/クォータ確認をしてください。\n\n"
+                    f"検索付きエラー: {msg}\n\n検索なし再試行エラー: {str(e2)}"
+                )
+        raise
 
 def gemini_csv_to_df(csv_text):
     cleaned = strip_code_fence(csv_text)
@@ -1165,7 +1192,7 @@ if "saved_recs" not in st.session_state:
 if "auto_df" not in st.session_state:
     st.session_state.auto_df = None
 
-with st.expander("Gemini APIで1レース自動予想", expanded=False):
+with st.expander("Gemini APIで自動予想", expanded=False):
     api_key_input = st.text_input(
         "Gemini APIキー（アプリ内入力・任意）",
         type="password",
@@ -1183,18 +1210,20 @@ with st.expander("Gemini APIで1レース自動予想", expanded=False):
     with c2:
         auto_place = st.selectbox("場所", ["東京", "京都", "福島", "中山", "阪神", "中京", "新潟", "小倉", "札幌", "函館"], key="auto_place")
     with c3:
-        auto_race_no = st.number_input("R", min_value=1, max_value=12, value=11, step=1, key="auto_race_no")
+        auto_race_no = st.number_input("単発R", min_value=1, max_value=12, value=11, step=1, key="auto_race_no")
 
     use_day_bias = st.checkbox("馬場・TB検索込み", value=True)
-    model_name = st.text_input("Gemini model", value="gemini-2.0-flash")
+    model_name = st.text_input("Gemini model", value="gemini-2.5-flash-lite")
+    retry_no_search = st.checkbox("429時は検索なしで再試行", value=True)
 
-    if st.button("全自動予想（馬場・TB検索込み）を実行", type="primary"):
+    st.markdown("#### 単発予想")
+    if st.button("この1レースを全自動予想", type="primary"):
         prompt = build_gemini_prediction_prompt(
             auto_date, auto_place, int(auto_race_no), use_day_bias=use_day_bias
         )
         try:
             with st.spinner("Geminiでレース名・芝ダ・距離・出走馬・馬場TBを検索してCSVを作成中です..."):
-                csv_data = call_gemini_with_search(prompt, model_name=model_name)
+                csv_data = call_gemini_with_search(prompt, model_name=model_name, use_search=use_day_bias, retry_no_search=retry_no_search)
                 st.session_state.auto_df = gemini_csv_to_df(csv_data)
             st.success("Gemini予想CSVを作成しました。下のランキングに反映します。")
             with st.expander("Gemini生成CSVを確認"):
@@ -1208,6 +1237,69 @@ with st.expander("Gemini APIで1レース自動予想", expanded=False):
         except Exception as e:
             st.error("Gemini API実行でエラーが発生しました。")
             st.code(str(e))
+
+    st.markdown("#### 7〜12Rまとめ予想")
+    st.caption("ボタン1つで7R〜12Rを順番に実行し、6レース分を1つのCSVにまとめます。429対策のため連続実行の間隔を空けられます。")
+
+    b1, b2, b3 = st.columns(3)
+    with b1:
+        batch_start = st.number_input("開始R", min_value=1, max_value=12, value=7, step=1, key="batch_start")
+    with b2:
+        batch_end = st.number_input("終了R", min_value=1, max_value=12, value=12, step=1, key="batch_end")
+    with b3:
+        batch_sleep = st.number_input("実行間隔 秒", min_value=0, max_value=60, value=5, step=1, key="batch_sleep")
+
+    if st.button("7〜12Rを一気に全自動予想"):
+        if int(batch_start) > int(batch_end):
+            st.error("開始Rは終了R以下にしてください。")
+        else:
+            dfs = []
+            errors = []
+            progress = st.progress(0)
+            race_nums = list(range(int(batch_start), int(batch_end) + 1))
+            status_box = st.empty()
+
+            for i, rn in enumerate(race_nums, start=1):
+                status_box.info(f"{auto_place}{rn}RをGeminiで予想中...（{i}/{len(race_nums)}）")
+                prompt = build_gemini_prediction_prompt(
+                    auto_date, auto_place, int(rn), use_day_bias=use_day_bias
+                )
+                try:
+                    csv_data = call_gemini_with_search(
+                        prompt,
+                        model_name=model_name,
+                        use_search=use_day_bias,
+                        retry_no_search=retry_no_search,
+                    )
+                    one_df = gemini_csv_to_df(csv_data)
+                    dfs.append(one_df)
+                    st.success(f"{auto_place}{rn}R 完了")
+                except Exception as e:
+                    errors.append(f"{auto_place}{rn}R: {str(e)}")
+                    st.warning(f"{auto_place}{rn}R は取得できませんでした。次へ進みます。")
+
+                progress.progress(i / len(race_nums))
+                if i < len(race_nums) and int(batch_sleep) > 0:
+                    time.sleep(int(batch_sleep))
+
+            if dfs:
+                st.session_state.auto_df = pd.concat(dfs, ignore_index=True)
+                status_box.success(f"{auto_place}{int(batch_start)}〜{int(batch_end)}R のGemini予想CSVを作成しました。下のランキングに反映します。")
+                with st.expander("まとめ生成CSVを確認", expanded=True):
+                    st.dataframe(st.session_state.auto_df, use_container_width=True)
+                    st.download_button(
+                        "7〜12RまとめCSVをダウンロード",
+                        data=st.session_state.auto_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"),
+                        file_name=f"{auto_date}_{auto_place}_{int(batch_start)}-{int(batch_end)}R_gemini.csv",
+                        mime="text/csv",
+                    )
+            else:
+                status_box.error("全レース取得できませんでした。10〜15分置くか、検索込みOFF/flash-liteで再実行してください。")
+
+            if errors:
+                with st.expander("取得できなかったレース"):
+                    for er in errors:
+                        st.code(er)
 
 uploaded = st.file_uploader("CSVをアップロードして使う場合はこちら", type=["csv"])
 
