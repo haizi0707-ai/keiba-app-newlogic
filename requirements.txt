@@ -1,5 +1,5 @@
-google-generativeai
+streamlit
 pandas
 numpy
-streamlit
-Pillow
+pillow
+google-genai
