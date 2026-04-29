@@ -1,4 +1,3 @@
-
 import os
 import re
 import io
@@ -9,16 +8,30 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v12.1 SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v12.2 Relative SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
+
+# v12.2:
+# まず相対位置版の履歴ファイルを読みに行きます。
+# なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
-    "prev3c": os.path.join(BASE_DIR, "prev3c_category_stats.csv"),
-    "prev4c": os.path.join(BASE_DIR, "prev4c_category_stats.csv"),
+    "prev3c": os.path.join(BASE_DIR, "prev3c_relative_category_stats.csv"),
+    "prev3c_fallback": os.path.join(BASE_DIR, "prev3c_category_stats.csv"),
+    "prev4c": os.path.join(BASE_DIR, "prev4c_relative_category_stats.csv"),
+    "prev4c_fallback": os.path.join(BASE_DIR, "prev4c_category_stats.csv"),
     "prevtrack": os.path.join(BASE_DIR, "prevtrack_roi_stats.csv"),
 }
 
 EVAL_MAP = {"かなり向く":1.25, "向く":1.10, "普通":1.00, "やや不向き":0.85, "不向き":0.70}
+
+def resolve_file(primary, fallback=None):
+    """相対位置版ファイルがあれば優先、なければ旧ファイルを読む"""
+    if primary and os.path.exists(primary):
+        return primary
+    if fallback and os.path.exists(fallback):
+        return fallback
+    return primary
 
 def norm_text(v):
     if pd.isna(v):
@@ -63,16 +76,24 @@ def parse_race_label(v):
 CANDS = {
     "date":["date","日付","開催日","年月日","日付S"],
     "場所":["場所","track","競馬場","開催","場名"],
-    "raceNo":["raceNo","race_number","R","レース番号","race_no","レースNo","R番号"],
+    "raceNo":["raceNo","race_number","R","Ｒ","レース番号","race_no","レースNo","R番号"],
     "raceName":["raceName","race_name","レース名"],
     "horseNo":["horseNo","horse_number","馬番"],
     "horseName":["horseName","horse_name","馬名"],
-    "distance":["distance","距離"],
+    "distance":["distance","距離","距離数値"],
     "surface":["芝ダ","芝・ダ","surface"],
     "raceLabel":["レース","race"],
     "prevTrack":["前走競馬場","前走場所","prevTrack"],
-    "prevSurface":["前走芝ダ","prevSurface"],
-    "prevDistance":["前走距離数値","前走距離","prevDistance"],
+    "prevSurface":["前走芝ダ","前芝・ダ","prevSurface"],
+    "prevDistance":["前走距離数値","前走距離","前距離","prevDistance"],
+
+    # v12.2 追加：予想CSV側にこの3列があれば、アプリ側で相対位置補正します。
+    "prevFieldSize":["前走頭数","前走出走頭数","prevFieldSize","fieldSize"],
+    "prev3cPos":["前3角通過順","前走3角通過順","前3角順位","前3角","前3角通過","prev3cPos"],
+    "prev4cPos":["前4角通過順","前走4角通過順","前4角順位","前4角","前4角通過","prev4cPos"],
+    "prev3cRel":["前3角相対位置","前走3角相対位置","prev3cRel"],
+    "prev4cRel":["前4角相対位置","前走4角相対位置","prev4cRel"],
+
     "prev3cCat":["前3角位置カテゴリ","前走3角カテゴリ","prev3cCat"],
     "prev4cCat":["前4角位置カテゴリ","前走4角カテゴリ","prev4cCat"],
     "prevStraight":["前走直線ロジック点","前走直線点","prevStraight"],
@@ -99,6 +120,118 @@ def rename_first_match(df, candidates):
             out = out.rename(columns={found: target})
     return out
 
+def normalize_existing_position_cat(v):
+    s = norm_text(v)
+    s = s.replace("２", "2").replace("３", "3").replace("４", "4").replace("６", "6")
+    s = s.replace("７", "7").replace("１０", "10").replace("１１", "11")
+    s = s.replace("~", "-").replace("〜", "-").replace("－", "-")
+    aliases = {
+        "逃げ": "1番手",
+        "先頭": "1番手",
+        "1": "1番手",
+        "1番": "1番手",
+        "1番手": "1番手",
+        "2-3": "2-3番手",
+        "2-3番手": "2-3番手",
+        "2番手": "2-3番手",
+        "3番手": "2-3番手",
+        "4-6": "4-6番手",
+        "4-6番手": "4-6番手",
+        "4番手": "4-6番手",
+        "5番手": "4-6番手",
+        "6番手": "4-6番手",
+        "7-10": "7-10番手",
+        "7-10番手": "7-10番手",
+        "7番手": "7-10番手",
+        "8番手": "7-10番手",
+        "9番手": "7-10番手",
+        "10番手": "7-10番手",
+        "11番手以下": "11番手以下",
+        "11以下": "11番手以下",
+        "後方": "11番手以下",
+        "最後方": "11番手以下",
+    }
+    return aliases.get(s, s)
+
+def calc_relative_position(pos, field_size):
+    if pd.isna(pos) or pd.isna(field_size):
+        return np.nan
+    try:
+        pos = float(pos)
+        field_size = float(field_size)
+    except Exception:
+        return np.nan
+    if field_size <= 0 or pos <= 0:
+        return np.nan
+    return pos / field_size
+
+def rel_to_app_category(rel, raw_pos=None):
+    """
+    予想CSV側の前走頭数・通過順から、アプリ既存5カテゴリに変換。
+    通過順位1番手は無条件で「1番手」。
+    2番手以下は相対位置で判定。
+    """
+    if raw_pos is not None and not pd.isna(raw_pos):
+        try:
+            if float(raw_pos) <= 1:
+                return "1番手"
+        except Exception:
+            pass
+
+    if pd.isna(rel):
+        return ""
+
+    try:
+        rel = float(rel)
+    except Exception:
+        return ""
+
+    if rel <= 0.25:
+        return "2-3番手"
+    if rel <= 0.45:
+        return "4-6番手"
+    if rel <= 0.85:
+        return "7-10番手"
+    return "11番手以下"
+
+def apply_relative_position_logic(df):
+    """
+    予想CSVに前走頭数・前3角通過順・前4角通過順がある場合、
+    前3角位置カテゴリ・前4角位置カテゴリを相対位置ベースに上書きします。
+    ない場合は、入力済みカテゴリをそのまま使います。
+    """
+    out = df.copy()
+
+    out["prev3cCat_original"] = out["prev3cCat"].apply(normalize_existing_position_cat)
+    out["prev4cCat_original"] = out["prev4cCat"].apply(normalize_existing_position_cat)
+
+    out["prev3cRel_calc"] = out.apply(lambda r: calc_relative_position(r["prev3cPos"], r["prevFieldSize"]), axis=1)
+    out["prev4cRel_calc"] = out.apply(lambda r: calc_relative_position(r["prev4cPos"], r["prevFieldSize"]), axis=1)
+
+    out["prev3cRel_final"] = np.where(pd.notna(out["prev3cRel"]), out["prev3cRel"], out["prev3cRel_calc"])
+    out["prev4cRel_final"] = np.where(pd.notna(out["prev4cRel"]), out["prev4cRel"], out["prev4cRel_calc"])
+
+    out["prev3cCat_relative"] = out.apply(lambda r: rel_to_app_category(r["prev3cRel_final"], r["prev3cPos"]), axis=1)
+    out["prev4cCat_relative"] = out.apply(lambda r: rel_to_app_category(r["prev4cRel_final"], r["prev4cPos"]), axis=1)
+
+    out["prev3cCat"] = np.where(
+        out["prev3cCat_relative"].astype(str).str.strip() != "",
+        out["prev3cCat_relative"],
+        out["prev3cCat_original"],
+    )
+    out["prev4cCat"] = np.where(
+        out["prev4cCat_relative"].astype(str).str.strip() != "",
+        out["prev4cCat_relative"],
+        out["prev4cCat_original"],
+    )
+
+    out["通過順補正"] = np.where(
+        pd.notna(out["prev3cRel_final"]) | pd.notna(out["prev4cRel_final"]),
+        "総頭数補正あり",
+        "CSVカテゴリ使用",
+    )
+    return out
+
 def prepare_race_df(df):
     df = rename_first_match(df, CANDS)
     for col in CANDS.keys():
@@ -115,11 +248,20 @@ def prepare_race_df(df):
         df[col] = df[col].apply(norm_surface)
     for col in ["horseName","raceName","date","prev3cCat","prev4cCat","paceEval","straightEval"]:
         df[col] = df[col].apply(norm_text)
-    for col in ["distance","raceNo","horseNo","prevDistance","prevStraight","prev2Straight"]:
+
+    num_cols = [
+        "distance","raceNo","horseNo","prevDistance","prevStraight","prev2Straight",
+        "prevFieldSize","prev3cPos","prev4cPos","prev3cRel","prev4cRel",
+    ]
+    for col in num_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
+
+    # v12.2: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    df = apply_relative_position_logic(df)
+
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
     df["レース"] = df.apply(lambda r: f"{r['場所']}{int(r['raceNo'])}R" if pd.notna(r["raceNo"]) and norm_text(r["場所"]) else norm_text(r["raceLabel"]), axis=1)
 
@@ -131,8 +273,11 @@ def prepare_race_df(df):
     return df
 
 def load_stat_defaults():
-    prev3c = read_csv_any(DEFAULT_FILES["prev3c"])
-    prev4c = read_csv_any(DEFAULT_FILES["prev4c"])
+    prev3c_path = resolve_file(DEFAULT_FILES["prev3c"], DEFAULT_FILES["prev3c_fallback"])
+    prev4c_path = resolve_file(DEFAULT_FILES["prev4c"], DEFAULT_FILES["prev4c_fallback"])
+
+    prev3c = read_csv_any(prev3c_path)
+    prev4c = read_csv_any(prev4c_path)
     prevtrack = read_csv_any(DEFAULT_FILES["prevtrack"])
 
     prev3c = prev3c.rename(columns={"前走競馬場":"prevTrack","前走芝ダ":"prevSurface","前走距離数値":"prevDistance","前3角位置カテゴリ":"prev3cCat","件数":"count","複勝率":"place_rate"})
@@ -145,8 +290,8 @@ def load_stat_defaults():
         d["prevDistance"] = pd.to_numeric(d["prevDistance"], errors="coerce")
         d["count"] = pd.to_numeric(d["count"], errors="coerce")
         d["place_rate"] = pd.to_numeric(d["place_rate"], errors="coerce")
-    prev3c["prev3cCat"] = prev3c["prev3cCat"].apply(norm_text)
-    prev4c["prev4cCat"] = prev4c["prev4cCat"].apply(norm_text)
+    prev3c["prev3cCat"] = prev3c["prev3cCat"].apply(normalize_existing_position_cat)
+    prev4c["prev4cCat"] = prev4c["prev4cCat"].apply(normalize_existing_position_cat)
 
     prevtrack["場所"] = prevtrack["場所"].apply(norm_track)
     prevtrack["surface"] = prevtrack["surface"].apply(norm_surface)
@@ -154,7 +299,8 @@ def load_stat_defaults():
     prevtrack["prevTrack"] = prevtrack["prevTrack"].apply(norm_track)
     prevtrack["count"] = pd.to_numeric(prevtrack["count"], errors="coerce")
     prevtrack["place_rate"] = pd.to_numeric(prevtrack["place_rate"], errors="coerce")
-    return prev3c, prev4c, prevtrack
+
+    return prev3c, prev4c, prevtrack, os.path.basename(prev3c_path), os.path.basename(prev4c_path)
 
 def map_rate_to_coef(rate, min_rate, max_rate):
     if pd.isna(rate):
@@ -237,10 +383,6 @@ def assign_relative_ranks(df):
                 out.at[ix, "相対評価"] = "D"
     return out
 
-
-
-
-
 def _rank_score(v):
     return {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}.get(str(v), 0)
 
@@ -248,16 +390,16 @@ def _eval_score(v):
     return {"かなり向く": 5, "向く": 4, "普通": 3, "やや不向き": 2, "不向き": 1}.get(norm_text(v), 3)
 
 def _position_score(v):
-    s = norm_text(v)
-    if "1" in s and "番手" in s:
+    s = normalize_existing_position_cat(v)
+    if s == "1番手":
         return 1
-    if "2-3" in s or "2~3" in s or "2〜3" in s:
+    if s == "2-3番手":
         return 2
-    if "4-6" in s or "4~6" in s or "4〜6" in s:
+    if s == "4-6番手":
         return 3
-    if "7-10" in s or "7~10" in s or "7〜10" in s:
+    if s == "7-10番手":
         return 4
-    if "11" in s:
+    if s == "11番手以下":
         return 5
     return 3
 
@@ -668,7 +810,6 @@ def recommend_for_race(g):
         "short_comment": short_comment,
     }
 
-
 def render_rank_cards(g):
     badge_map = {"S": "#d4af37", "A": "#d6deef", "B": "#c7a85a", "C": "#7b8db7", "D": "#53627f"}
     rows = []
@@ -792,12 +933,8 @@ def render_rank_cards(g):
     </body>
     </html>
     """
-    # iPhone/Streamlit CloudではHTMLカードの実高さが計算より大きくなりやすいので、
-    # かなり余裕を持たせて全頭が切れないようにする。
     height = 190 + len(g) * 112
     components.html(html, height=height, scrolling=False)
-
-
 
 def get_font(size, bold=False):
     # Streamlit Cloudでは packages.txt に fonts-noto-cjk を入れると下記Notoが使えます。
@@ -826,10 +963,6 @@ def draw_fit_text(draw, xy, text, font, fill, max_width):
     if t != str(text):
         t = t[:-1] + "…"
     draw.text((x,y), t, font=font, fill=fill)
-
-
-
-
 
 def make_sns_image(saved):
     items = [r for r in saved if float(r.get("参考信頼度", 0) or 0) >= 90.0]
@@ -875,7 +1008,6 @@ def make_sns_image(saved):
     items = [clean_item(r) for r in items]
 
     # 競馬場ごと → R順で並べる
-    # JRAの並びに近い形。必要ならここだけ変更すればOK。
     track_order = {
         "福島": 1,
         "東京": 2,
@@ -972,7 +1104,6 @@ def make_sns_image(saved):
     bio.seek(0)
     return bio
 
-
 def safe_race_no(row):
     """raceNo が空/NaNでも、レース表記からR番号を復元する"""
     try:
@@ -988,8 +1119,6 @@ def safe_race_no(row):
         if m:
             return int(m.group(1))
     return 0
-
-
 
 def add_saved_recs(new_recs):
     if "saved_recs" not in st.session_state:
@@ -1029,14 +1158,15 @@ def add_saved_recs(new_recs):
 
     st.session_state.saved_recs = list(store.values())
 
-
 def saved_df():
     if "saved_recs" not in st.session_state:
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v12.1 SNS Save")
+st.title("競馬ランクアプリ v12.2 Relative SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
+st.caption("v12.2: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
     st.session_state.saved_recs = []
@@ -1046,9 +1176,12 @@ uploaded = st.file_uploader("1会場分の予想CSVをアップロード", type=
 current_recs = []
 if uploaded is None:
     st.info("まず1会場6レース分のCSVを読み込んでください。レース識別IDは 日付 + 場所 + R で作成します。")
+    st.info("推奨追加列: 前走頭数, 前3角通過順, 前4角通過順。これらがあると総頭数補正が有効になります。")
 else:
-    prev3c_stat, prev4c_stat, prevtrack_stat = load_stat_defaults()
+    prev3c_stat, prev4c_stat, prevtrack_stat, prev3c_file, prev4c_file = load_stat_defaults()
     df = prepare_race_df(read_csv_any(uploaded))
+
+    st.caption(f"3角履歴ファイル: {prev3c_file} / 4角履歴ファイル: {prev4c_file}")
 
     df["本体点"] = (df["prevStraight"] * 0.30 + df["prev2Straight"] * 0.20).round(2)
     df["3角履歴係数"] = df.apply(lambda r: hist_coef_prev3c(r, prev3c_stat), axis=1)
@@ -1063,7 +1196,7 @@ else:
     df["トータルランク"] = df["総合点"].apply(total_rank)
     df = assign_relative_ranks(df)
 
-    tab1, tab2, tab3 = st.tabs(["ランキング", "おすすめ買い目", "保存・SNS画像"])
+    tab1, tab2, tab3, tab4 = st.tabs(["ランキング", "おすすめ買い目", "保存・SNS画像", "通過順補正確認"])
 
     with tab1:
         for race_id in df["レース識別ID"].unique():
@@ -1164,3 +1297,58 @@ else:
             if st.button("保存済み推奨馬をクリア"):
                 st.session_state.saved_recs = []
                 st.success("保存済み推奨馬をクリアしました。")
+
+    with tab4:
+        st.subheader("通過順補正確認")
+        st.caption("前走頭数・前3角通過順・前4角通過順がCSVにある場合、ここで総頭数補正後のカテゴリを確認できます。")
+        check_cols = [
+            "date", "レース", "horseNo", "horseName",
+            "prevFieldSize", "prev3cPos", "prev4cPos",
+            "prev3cRel_final", "prev4cRel_final",
+            "prev3cCat_original", "prev4cCat_original",
+            "prev3cCat", "prev4cCat",
+            "3角履歴係数", "4角履歴係数",
+            "通過順補正",
+        ]
+        show_df = df[check_cols].rename(columns={
+            "date": "日付",
+            "horseNo": "馬番",
+            "horseName": "馬名",
+            "prevFieldSize": "前走頭数",
+            "prev3cPos": "前3角通過順",
+            "prev4cPos": "前4角通過順",
+            "prev3cRel_final": "前3角相対位置",
+            "prev4cRel_final": "前4角相対位置",
+            "prev3cCat_original": "前3角元カテゴリ",
+            "prev4cCat_original": "前4角元カテゴリ",
+            "prev3cCat": "前3角補正後カテゴリ",
+            "prev4cCat": "前4角補正後カテゴリ",
+        })
+        st.dataframe(show_df, use_container_width=True, hide_index=True)
+
+        export_cols = [
+            "date","場所","レース","raceName","horseNo","horseName",
+            "prevFieldSize","prev3cPos","prev4cPos","prev3cRel_final","prev4cRel_final",
+            "prev3cCat","prev4cCat","通過順補正",
+            "相対評価","トータルランク","本体点","展開位置補正","前走場所直線補正","総合点",
+        ]
+        export_df = df[export_cols].rename(columns={
+            "date":"日付",
+            "raceName":"レース名",
+            "horseNo":"馬番",
+            "horseName":"馬名",
+            "prevFieldSize":"前走頭数",
+            "prev3cPos":"前3角通過順",
+            "prev4cPos":"前4角通過順",
+            "prev3cRel_final":"前3角相対位置",
+            "prev4cRel_final":"前4角相対位置",
+            "prev3cCat":"前3角位置カテゴリ",
+            "prev4cCat":"前4角位置カテゴリ",
+        })
+        result_csv = export_df.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            "補正確認付き予想結果CSVをダウンロード",
+            data=result_csv.encode("utf-8-sig"),
+            file_name="keiba_rank_v122_relative_results.csv",
+            mime="text/csv",
+        )
