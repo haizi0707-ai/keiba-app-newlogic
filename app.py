@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v12.2 Relative SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v12.3 Relative SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v12.2:
+# v12.3:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -241,6 +241,36 @@ def prepare_race_df(df):
     parsed = df["raceLabel"].apply(parse_race_label)
     df["場所"] = np.where(df["場所"].astype(str).str.strip() != "", df["場所"], parsed.apply(lambda x: x[0]))
     df["raceNo"] = np.where(df["raceNo"].astype(str).str.strip() != "", df["raceNo"], parsed.apply(lambda x: x[1]))
+    df["raceNo"] = pd.to_numeric(df["raceNo"], errors="coerce")
+
+    # 0R対策：raceNo が0/NaNの場合は、レース表記から再抽出する
+    def restore_race_no(row):
+        try:
+            v = row.get("raceNo", np.nan)
+            if pd.notna(v) and int(float(v)) > 0:
+                return int(float(v))
+        except Exception:
+            pass
+
+        for key in ["raceLabel", "レース", "raceName"]:
+            s = norm_text(row.get(key, ""))
+            m = re.search(r"(\d{1,2})\s*R", s, flags=re.IGNORECASE)
+            if m:
+                n = int(m.group(1))
+                if n > 0:
+                    return n
+            m = re.search(r"第\s*(\d{1,2})\s*競走", s)
+            if m:
+                n = int(m.group(1))
+                if n > 0:
+                    return n
+            if re.fullmatch(r"\d{1,2}", s):
+                n = int(s)
+                if 1 <= n <= 12:
+                    return n
+        return np.nan
+
+    df["raceNo"] = df.apply(restore_race_no, axis=1)
 
     for col in ["場所","prevTrack"]:
         df[col] = df[col].apply(norm_track)
@@ -259,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v12.2: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v12.3: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1088,12 +1118,10 @@ def make_sns_image(saved):
         no_text = str(int(float(r.get("馬番", 0) or 0)))
         draw.text((292, y + 22), no_text, font=horse_no_font, fill=gold)
 
-        draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, 445)
+        draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, 585)
 
-        conf = float(r.get("参考信頼度", 0) or 0)
-        conf_text = f"{conf:.1f}%"
-        cb = draw.textbbox((0, 0), conf_text, font=conf_font)
-        draw.text((980 - (cb[2]-cb[0]), y + 30), conf_text, font=conf_font, fill=gray)
+        # v12.3: SNS画像では信頼度%を非表示にする
+        # その分、馬名の表示幅を広げる
 
         y += row_h
 
@@ -1105,19 +1133,49 @@ def make_sns_image(saved):
     return bio
 
 def safe_race_no(row):
-    """raceNo が空/NaNでも、レース表記からR番号を復元する"""
+    """
+    raceNo が空/NaN/0でも、レース表記からR番号を復元する。
+    0R対策：
+    ・raceNo が 0 の場合は無効扱い
+    ・レース / raceLabel / レース識別ID / raceName / 元R表記から再抽出
+    ・「京都11R」「11R」「第11競走」「11」などを広めに拾う
+    """
+    # まず数値raceNo。ただし0以下は無効。
     try:
         v = row.get("raceNo", np.nan)
         if pd.notna(v):
-            return int(float(v))
+            n = int(float(v))
+            if n > 0:
+                return n
     except Exception:
         pass
 
-    for key in ["レース", "raceLabel", "raceName"]:
+    # 次に文字列から復元
+    for key in ["レース", "raceLabel", "レース識別ID", "raceName", "R", "Ｒ", "raceNo"]:
         s = norm_text(row.get(key, ""))
-        m = re.search(r"(\d+)\s*R", s)
+        if not s:
+            continue
+
+        # 京都11R / 11R / 11 R
+        m = re.search(r"(\d{1,2})\s*R", s, flags=re.IGNORECASE)
         if m:
-            return int(m.group(1))
+            n = int(m.group(1))
+            if n > 0:
+                return n
+
+        # 第11競走
+        m = re.search(r"第\s*(\d{1,2})\s*競走", s)
+        if m:
+            n = int(m.group(1))
+            if n > 0:
+                return n
+
+        # 単独の1〜12数字だけならRとして扱う
+        if re.fullmatch(r"\d{1,2}", s):
+            n = int(s)
+            if 1 <= n <= 12:
+                return n
+
     return 0
 
 def add_saved_recs(new_recs):
@@ -1163,9 +1221,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v12.2 Relative SNS Save")
+st.title("競馬ランクアプリ v12.3 Relative SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v12.2: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v12.3: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
