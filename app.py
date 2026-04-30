@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v12.5 Relative SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v12.6 Dark SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v12.5:
+# v12.6:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v12.5: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v12.6: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1066,18 +1066,16 @@ def make_sns_image(saved):
     if not items:
         return None
 
-    # 画像表示用の場所名・R番号を必ず作り直す
-    # 保存済みデータに「東京11R」のように場所+Rが混ざっていても、ここで正規化する
     def clean_item(r):
         rr = dict(r)
         place_raw = norm_text(rr.get("場所", ""))
         race_raw = norm_text(rr.get("レース", ""))
         single_raw = norm_text(rr.get("単複おすすめ1", ""))
 
-        # 場所にRが混ざっているケースを補正
         m = re.search(r"(福島|新潟|東京|中山|中京|京都|阪神|小倉|札幌|函館)\s*(\d+)\s*R", place_raw)
         if not m:
             m = re.search(r"(福島|新潟|東京|中山|中京|京都|阪神|小倉|札幌|函館)\s*(\d+)\s*R", race_raw)
+
         if m:
             rr["場所"] = m.group(1)
             rr["R"] = int(m.group(2))
@@ -1088,7 +1086,6 @@ def make_sns_image(saved):
             except Exception:
                 rr["R"] = 0
 
-        # 馬番/馬名も念のため補正
         try:
             rr["馬番"] = int(float(rr.get("馬番", 0) or 0))
         except Exception:
@@ -1105,20 +1102,10 @@ def make_sns_image(saved):
 
     items = [clean_item(r) for r in items]
 
-    # 競馬場ごと → R順で並べる
     track_order = {
-        "福島": 1,
-        "東京": 2,
-        "京都": 3,
-        "阪神": 4,
-        "中山": 5,
-        "中京": 6,
-        "新潟": 7,
-        "小倉": 8,
-        "札幌": 9,
-        "函館": 10,
+        "福島": 1, "東京": 2, "京都": 3, "阪神": 4, "中山": 5,
+        "中京": 6, "新潟": 7, "小倉": 8, "札幌": 9, "函館": 10,
     }
-
     items = sorted(
         items,
         key=lambda r: (
@@ -1128,78 +1115,88 @@ def make_sns_image(saved):
         )
     )
 
-    date = str(items[0]["日付"])
+    raw_date = str(items[0].get("日付", ""))
+    dt = pd.to_datetime(raw_date, errors="coerce")
+    if pd.isna(dt):
+        date_main = raw_date.replace("/", ".").replace("-", ".")
+        weekday = ""
+    else:
+        date_main = dt.strftime("%Y.%m.%d")
+        weekday = dt.strftime("%A").upper()
 
-    W = 1080
-    row_h = 108
-    H = max(1280, 285 + len(items) * row_h + 60)
-    img = Image.new("RGB", (W, H), (250, 249, 245))
+    # 横長SNSデザイン
+    W, H = 1792, 1024
+    img = Image.new("RGB", (W, H), (10, 14, 22))
     draw = ImageDraw.Draw(img)
 
-    for y in range(H):
-        shade = int(7 * y / H)
-        draw.line([(0, y), (W, y)], fill=(250 - shade, 249 - shade, 245 - shade))
+    bg = (10, 14, 22)
+    white = (248, 248, 244)
+    gold = (229, 191, 72)
+    muted = (145, 149, 160)
+    line = (42, 47, 57)
+    circle_line = (48, 40, 28)
 
-    title_font = get_font(58, True)
-    date_font = get_font(38, True)
-    race_font = get_font(34, True)
-    horse_no_font = get_font(38, True)
-    horse_font = get_font(40, True)
-    mate_font = get_font(28, True)
-    conf_font = get_font(24, True)
+    # subtle right circle decoration
+    for offset, width in [(0, 2), (75, 2)]:
+        draw.ellipse((1260 + offset, -130 + offset, 1940 - offset, 550 - offset), outline=circle_line, width=width)
 
-    navy = (16, 33, 65)
-    gold = (209, 166, 59)
-    red = (223, 55, 53)
-    gray = (92, 100, 116)
-    line = (224, 211, 178)
-    white = (255, 255, 255)
+    # fonts
+    small_eng_font = get_font(27, True)
+    title_font = get_font(70, True)
+    date_font = get_font(42, False)
+    weekday_font = get_font(24, True)
+    place_font = get_font(34, True)
+    race_font = get_font(38, True)
+    horse_no_font = get_font(42, True)
+    horse_font = get_font(50, True)
+    mate_font = get_font(27, False)
 
     # header
-    header_x1, header_y1, header_x2, header_y2 = 56, 45, 1024, 195
-    draw.rounded_rectangle((header_x1, header_y1, header_x2, header_y2), radius=34, fill=navy, outline=gold, width=4)
+    draw.text((120, 100), "T O D A Y ' S   P I C K S", font=small_eng_font, fill=gold)
+    draw.text((120, 155), "本日の推奨馬", font=title_font, fill=white)
+    draw.text((1435, 120), date_main, font=date_font, fill=gold)
+    if weekday:
+        draw.text((1550, 177), weekday, font=weekday_font, fill=muted)
 
-    title = "本日の推奨馬"
-    tb = draw.textbbox((0, 0), title, font=title_font)
-    draw.text(((W - (tb[2] - tb[0])) / 2, 64), title, font=title_font, fill=white)
+    draw.line((120, 280, 1660, 280), fill=line, width=2)
 
-    db = draw.textbbox((0, 0), date, font=date_font)
-    draw.text(((W - (db[2] - db[0])) / 2, 132), date, font=date_font, fill=(238, 224, 174))
+    # rows
+    row_y = 365
+    row_h = 185
+    max_rows = min(len(items), 5)
 
-    draw.line((70, 235, 1010, 235), fill=gold, width=4)
+    for i, r in enumerate(items[:max_rows]):
+        y = row_y + i * row_h
+        if i > 0:
+            draw.line((120, y - 58, 1660, y - 58), fill=(31, 36, 45), width=2)
 
-    y = 282
-    for r in items:
-        draw.rounded_rectangle((58, y, 1022, y + 84), radius=26, fill=white, outline=line, width=3)
-
-        race_label = f'{norm_track(r["場所"])}{int(float(r.get("R", 0) or 0))}R'
-        badge_x1, badge_y1, badge_x2, badge_y2 = 84, y + 18, 250, y + 66
-        row_y1, row_y2 = y, y + 84
-        draw.rounded_rectangle((badge_x1, badge_y1, badge_x2, badge_y2), radius=15, fill=red)
-
-        # レースBOX内で上下左右中央揃え
-        rf = race_font
-        if draw.textbbox((0, 0), race_label, font=rf)[2] - draw.textbbox((0, 0), race_label, font=rf)[0] > (badge_x2 - badge_x1 - 18):
-            rf = get_font(30, True)
-        draw_centered_text(draw, (badge_x1, badge_y1, badge_x2, badge_y2), race_label, rf, white)
-
-        # 馬番・馬名・相手3頭も、行BOXに対して上下中央揃え
-        no_text = str(int(float(r.get("馬番", 0) or 0)))
-        draw_centered_text(draw, (270, row_y1, 345, row_y2), no_text, horse_no_font, gold)
-
+        place = norm_track(r.get("場所", ""))
+        race_no = int(float(r.get("R", 0) or 0))
+        horse_no = int(float(r.get("馬番", 0) or 0))
+        horse_name = norm_text(r.get("馬名", ""))
         mate_text = norm_text(r.get("相手表示", ""))
+
+        # left place/race
+        draw.text((120, y - 2), place, font=place_font, fill=gold)
+        draw.text((120, y + 38), f"{race_no}R", font=race_font, fill=gold)
+
+        # horse number circle
+        cx, cy, rad = 335, y + 36, 42
+        draw.ellipse((cx-rad, cy-rad, cx+rad, cy+rad), fill=gold)
+        draw_centered_text(draw, (cx-rad, cy-rad, cx+rad, cy+rad), str(horse_no), horse_no_font, bg)
+
+        # horse name
+        name_x1, name_y1, name_x2, name_y2 = 420, y - 10, 1160, y + 55
+        draw_fit_centered_text(draw, (name_x1, name_y1, name_x2, name_y2), horse_name, horse_font, white)
+
+        # opponent marks under horse name
         if mate_text:
-            # 馬名欄と相手欄を分けて、それぞれ中央揃え
-            draw_fit_centered_text(draw, (365, row_y1, 785, row_y2), r["馬名"], horse_font, navy)
-            draw_centered_text(draw, (800, row_y1, 1000, row_y2), mate_text, mate_font, gold)
-        else:
-            draw_fit_centered_text(draw, (365, row_y1, 1000, row_y2), r["馬名"], horse_font, navy)
+            # symbols are intentionally separated like the reference design
+            mate_text_spaced = mate_text.replace("◯", "○ ").replace("▲", "▲ ").replace("△", "△ ")
+            draw.text((420, y + 62), mate_text_spaced, font=mate_font, fill=muted)
 
-        # v12.5: SNS画像では信頼度%を非表示にする
-
-        y += row_h
-
-    draw.line((70, H - 55, 1010, H - 55), fill=gold, width=3)
+    # bottom line
+    draw.line((120, 955, 1660, 955), fill=(31, 36, 45), width=2)
 
     bio = io.BytesIO()
     img.save(bio, format="PNG")
@@ -1295,9 +1292,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v12.5 Relative SNS Save")
+st.title("競馬ランクアプリ v12.6 Dark SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v12.5: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v12.6: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
