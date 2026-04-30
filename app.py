@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v12.6 Dark SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v12.7 Dark SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v12.6:
+# v12.7:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v12.6: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v12.7: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1186,14 +1186,16 @@ def make_sns_image(saved):
         draw_centered_text(draw, (cx-rad, cy-rad, cx+rad, cy+rad), str(horse_no), horse_no_font, bg)
 
         # horse name
-        name_x1, name_y1, name_x2, name_y2 = 420, y - 10, 1160, y + 55
-        draw_fit_centered_text(draw, (name_x1, name_y1, name_x2, name_y2), horse_name, horse_font, white)
+        # v12.7: 馬名を左寄せにし、相手印を馬名の真下に揃える
+        name_x = 500
+        name_y = y - 10
+        name_max_width = 760
+        draw_fit_text(draw, (name_x, name_y), horse_name, horse_font, white, name_max_width)
 
-        # opponent marks under horse name
+        # opponent marks directly under horse name
         if mate_text:
-            # symbols are intentionally separated like the reference design
             mate_text_spaced = mate_text.replace("◯", "○ ").replace("▲", "▲ ").replace("△", "△ ")
-            draw.text((420, y + 62), mate_text_spaced, font=mate_font, fill=muted)
+            draw.text((name_x, y + 62), mate_text_spaced, font=mate_font, fill=muted)
 
     # bottom line
     draw.line((120, 955, 1660, 955), fill=(31, 36, 45), width=2)
@@ -1292,9 +1294,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v12.6 Dark SNS Save")
+st.title("競馬ランクアプリ v12.7 Dark SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v12.6: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v12.7: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
