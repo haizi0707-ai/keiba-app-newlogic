@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v12.9 Dabista Vertical SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v13.0 Dabista Vertical SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v12.9:
+# v13.0:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v12.9: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v13.0: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1156,10 +1156,12 @@ def make_sns_image(saved):
     # 雲
     cloud = (174, 190, 190)
     cloud_shadow = (130, 150, 158)
-    for cx, cy, w in [(22, 75, 38), (126, 50, 34), (152, 118, 26)]:
+    for cx, cy, w in [(22, 75, 38), (126, 50, 34), (152, 118, 30)]:
+        # Pillowは x1>x2 / y1>y2 の矩形でエラーになるため、
+        # 小さい雲でも座標が逆転しないように安全な幅で描画する。
         sd.rectangle((cx, cy+7, cx+w, cy+12), fill=cloud_shadow)
-        sd.rectangle((cx+8, cy, cx+w-5, cy+10), fill=cloud)
-        sd.rectangle((cx+15, cy-6, cx+w-15, cy+14), fill=cloud)
+        sd.rectangle((cx+6, cy, cx+w-4, cy+10), fill=cloud)
+        sd.rectangle((cx+11, cy-6, cx+w-8, cy+14), fill=cloud)
         sd.rectangle((cx+2, cy+6, cx+w+8, cy+18), fill=cloud)
 
     # 遠景の山
@@ -1382,9 +1384,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v12.9 Dabista Vertical SNS Save")
+st.title("競馬ランクアプリ v13.0 Dabista Vertical SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v12.9: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v13.0: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
