@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v12.3 Relative SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v12.4 Relative SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v12.3:
+# v12.4:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v12.3: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v12.4: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -994,6 +994,43 @@ def draw_fit_text(draw, xy, text, font, fill, max_width):
         t = t[:-1] + "…"
     draw.text((x,y), t, font=font, fill=fill)
 
+
+def extract_opponent_marks(r):
+    """
+    保存済み推奨馬の買い目から、本命以外の相手馬番を最大3頭抽出して
+    SNS画像用の「◯1 ▲2 △3」形式にする。
+    """
+    try:
+        honmei_no = int(float(r.get("馬番", 0) or 0))
+    except Exception:
+        honmei_no = 0
+
+    opponents = []
+    for key in ["買い目1", "買い目2", "買い目3", "買い目4", "買い目5", "買い目6"]:
+        text = norm_text(r.get(key, ""))
+        if not text:
+            continue
+
+        nums = re.findall(r"\d+", text)
+        for n in nums:
+            try:
+                num = int(n)
+            except Exception:
+                continue
+            if num <= 0:
+                continue
+            if honmei_no and num == honmei_no:
+                continue
+            if num not in opponents:
+                opponents.append(num)
+            if len(opponents) >= 3:
+                break
+        if len(opponents) >= 3:
+            break
+
+    marks = ["◯", "▲", "△"]
+    return " ".join([f"{marks[i]}{opponents[i]}" for i in range(min(3, len(opponents)))])
+
 def make_sns_image(saved):
     items = [r for r in saved if float(r.get("参考信頼度", 0) or 0) >= 90.0]
     if not items:
@@ -1033,6 +1070,7 @@ def make_sns_image(saved):
             rr["馬名"] = re.sub(r"^\d+\s*", "", single_raw)
 
         rr["参考信頼度"] = float(rr.get("参考信頼度", 0) or 0)
+        rr["相手表示"] = extract_opponent_marks(rr)
         return rr
 
     items = [clean_item(r) for r in items]
@@ -1076,7 +1114,8 @@ def make_sns_image(saved):
     date_font = get_font(38, True)
     race_font = get_font(34, True)
     horse_no_font = get_font(38, True)
-    horse_font = get_font(42, True)
+    horse_font = get_font(40, True)
+    mate_font = get_font(28, True)
     conf_font = get_font(24, True)
 
     navy = (16, 33, 65)
@@ -1118,10 +1157,17 @@ def make_sns_image(saved):
         no_text = str(int(float(r.get("馬番", 0) or 0)))
         draw.text((292, y + 22), no_text, font=horse_no_font, fill=gold)
 
-        draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, 585)
+        # 馬名 + 相手3頭を横並び表示
+        # 例：ベラジオボンド　◯1 ▲2 △3
+        mate_text = norm_text(r.get("相手表示", ""))
+        if mate_text:
+            name_max_width = 430
+            draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, name_max_width)
+            draw.text((805, y + 28), mate_text, font=mate_font, fill=gold)
+        else:
+            draw_fit_text(draw, (365, y + 19), r["馬名"], horse_font, navy, 585)
 
-        # v12.3: SNS画像では信頼度%を非表示にする
-        # その分、馬名の表示幅を広げる
+        # v12.4: SNS画像では信頼度%を非表示にする
 
         y += row_h
 
@@ -1221,9 +1267,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v12.3 Relative SNS Save")
+st.title("競馬ランクアプリ v12.4 Relative SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v12.3: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v12.4: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
