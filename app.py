@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v13.2 Stable Vertical SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v12.7 Vertical SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v13.2:
+# v12.7:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v13.2: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v12.7: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1103,9 +1103,18 @@ def make_sns_image(saved):
     items = [clean_item(r) for r in items]
 
     track_order = {
-        "福島": 1, "東京": 2, "京都": 3, "阪神": 4, "中山": 5,
-        "中京": 6, "新潟": 7, "小倉": 8, "札幌": 9, "函館": 10,
+        "福島": 1,
+        "東京": 2,
+        "京都": 3,
+        "阪神": 4,
+        "中山": 5,
+        "中京": 6,
+        "新潟": 7,
+        "小倉": 8,
+        "札幌": 9,
+        "函館": 10,
     }
+
     items = sorted(
         items,
         key=lambda r: (
@@ -1124,113 +1133,52 @@ def make_sns_image(saved):
         date_main = dt.strftime("%Y.%m.%d")
         weekday = dt.strftime("%A").upper()
 
-    # v13.2 安定版：
-    # 背景をプログラムで無理に描き込まず、読みやすい縦型レイアウトを固定。
-    # dabista_bg.png が同じフォルダにある場合だけ背景画像として使用。
+    # v12.7 縦画面仕様：黒背景・高級感デザイン
+    # 推奨馬は全頭表示。頭数に応じて縦幅を自動拡張する。
     W = 1080
-    row_y = 330
-    row_h = 166
-    bottom_margin = 110
+    row_y = 360
+    row_h = 155
+    bottom_margin = 125
     H = max(1920, row_y + len(items) * row_h + bottom_margin)
 
-    bg_path = os.path.join(BASE_DIR, "dabista_bg.png")
-    if os.path.exists(bg_path):
-        bg = Image.open(bg_path).convert("RGB")
-        # 背景画像を中央トリミングで縦長に合わせる
-        bw, bh = bg.size
-        target_ratio = W / H
-        bg_ratio = bw / bh
-        if bg_ratio > target_ratio:
-            new_w = int(bh * target_ratio)
-            left = (bw - new_w) // 2
-            bg = bg.crop((left, 0, left + new_w, bh))
-        else:
-            new_h = int(bw / target_ratio)
-            top = max(0, (bh - new_h) // 2)
-            bg = bg.crop((0, top, bw, top + new_h))
-        img = bg.resize((W, H), Image.Resampling.LANCZOS)
-    else:
-        # 安定したダークネイビー背景
-        img = Image.new("RGB", (W, H), (9, 14, 24))
+    bg = (10, 14, 22)
+    white = (248, 248, 244)
+    gold = (229, 191, 72)
+    muted = (145, 149, 160)
+    line = (42, 47, 57)
+    circle_line = (48, 40, 28)
 
+    img = Image.new("RGB", (W, H), bg)
     draw = ImageDraw.Draw(img)
 
-    # 文字可読性のために全体へ暗幕
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 82))
-    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-    draw = ImageDraw.Draw(img)
+    # subtle decoration
+    for offset, width in [(0, 2), (55, 2)]:
+        draw.ellipse((680 + offset, -120 + offset, 1260 - offset, 460 - offset), outline=circle_line, width=width)
 
-    # 色
-    navy = (12, 35, 63)
-    white = (248, 248, 241)
-    gold = (248, 203, 54)
-    pale_gold = (255, 232, 115)
-    black = (17, 21, 25)
-    line_col = (236, 236, 224)
-    shadow = (20, 23, 28)
-    muted = (180, 190, 198)
+    small_eng_font = get_font(25, True)
+    title_font = get_font(70, True)
+    date_font = get_font(40, False)
+    weekday_font = get_font(22, True)
+    place_font = get_font(31, True)
+    race_font = get_font(36, True)
+    horse_no_font = get_font(42, True)
+    horse_font = get_font(45, True)
+    mate_font = get_font(25, False)
 
-    # フォント
-    title_font = get_font(64, True)
-    eng_font = get_font(34, True)
-    date_font = get_font(37, True)
-    weekday_font = get_font(29, True)
-    place_font = get_font(33, True)
-    race_font = get_font(42, True)
-    horse_no_font = get_font(58, True)
-    horse_font = get_font(46, True)
-    mate_font = get_font(29, True)
+    # header
+    draw.text((80, 92), "T O D A Y ' S   P I C K S", font=small_eng_font, fill=gold)
+    draw.text((80, 150), "本日の推奨馬", font=title_font, fill=white)
+    draw.text((670, 135), date_main, font=date_font, fill=gold)
+    if weekday:
+        draw.text((780, 190), weekday, font=weekday_font, fill=muted)
+    draw.line((80, 285, 1000, 285), fill=line, width=2)
 
-    def stroke_text(pos, text, font, fill, stroke_fill=shadow, stroke_width=3):
-        x, y = pos
-        draw.text((x, y), str(text), font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
-
-    def pixel_panel(box, fill, outline=line_col, width=4, corner=18):
-        x1, y1, x2, y2 = box
-        pts = [
-            (x1+corner, y1), (x2-corner, y1), (x2, y1+corner),
-            (x2, y2-corner), (x2-corner, y2), (x1+corner, y2),
-            (x1, y2-corner), (x1, y1+corner)
-        ]
-        draw.polygon(pts, fill=fill, outline=outline)
-        for i in range(1, width):
-            pts2 = [
-                (x1+corner+i, y1+i), (x2-corner-i, y1+i), (x2-i, y1+corner+i),
-                (x2-i, y2-corner-i), (x2-corner-i, y2-i), (x1+corner+i, y2-i),
-                (x1+i, y2-corner-i), (x1+i, y1+corner+i)
-            ]
-            draw.line(pts2 + [pts2[0]], fill=outline, width=1)
-
-    def draw_horseshoe(cx, cy, size):
-        # 文字化け防止：フォント記号ではなく図形で馬蹄を描く
-        col = gold
-        dark = (112, 76, 10)
-        box = (cx, cy, cx + size, cy + size)
-        draw.arc(box, 35, 325, fill=dark, width=18)
-        draw.arc(box, 35, 325, fill=col, width=12)
-        draw.rectangle((cx + 2, cy + size//2 + 12, cx + 18, cy + size - 10), fill=col, outline=dark)
-        draw.rectangle((cx + size - 18, cy + size//2 + 12, cx + size - 2, cy + size - 10), fill=col, outline=dark)
-
-    # ヘッダー
-    pixel_panel((28, 58, 765, 250), navy, outline=line_col, width=4, corner=26)
-    pixel_panel((795, 80, 1052, 225), navy, outline=line_col, width=4, corner=18)
-
-    draw_horseshoe(68, 118, 72)
-    draw.text((150, 82), "TODAY'S PICKS", font=eng_font, fill=pale_gold, stroke_width=2, stroke_fill=shadow)
-    draw.text((150, 135), "本日の推奨馬", font=title_font, fill=white, stroke_width=3, stroke_fill=shadow)
-
-    draw.text((835, 108), date_main, font=date_font, fill=pale_gold, stroke_width=2, stroke_fill=shadow)
-    draw.text((875, 160), weekday, font=weekday_font, fill=(183, 217, 236), stroke_width=2, stroke_fill=shadow)
-
-    # dabista_bg.png がない場合は、軽い装飾線だけ追加
-    if not os.path.exists(bg_path):
-        draw.line((52, 286, 1028, 286), fill=(255, 255, 255, 70), width=2)
-        for yy in range(520, H, 260):
-            draw.line((325, yy, 965, yy), fill=(255, 255, 255, 90), width=2)
-
-    # 行
+    # rows
     for i, r in enumerate(items):
         y = row_y + i * row_h
+
+        if i > 0:
+            draw.line((80, y - 42, 1000, y - 42), fill=(31, 36, 45), width=2)
 
         place = norm_track(r.get("場所", ""))
         race_no = int(float(r.get("R", 0) or 0))
@@ -1238,22 +1186,24 @@ def make_sns_image(saved):
         horse_name = norm_text(r.get("馬名", ""))
         mate_text = norm_text(r.get("相手表示", ""))
 
-        stroke_text((62, y + 2), place, place_font, pale_gold, stroke_width=3)
-        stroke_text((62, y + 44), f"{race_no}R", race_font, pale_gold, stroke_width=3)
+        # place / race
+        draw.text((80, y - 6), place, font=place_font, fill=gold)
+        draw.text((80, y + 34), f"{race_no}R", font=race_font, fill=gold)
 
-        bx1, by1, bx2, by2 = 184, y - 4, 284, y + 102
-        pixel_panel((bx1, by1, bx2, by2), gold, outline=black, width=4, corner=12)
-        draw_centered_text(draw, (bx1, by1, bx2, by2), str(horse_no), horse_no_font, black)
+        # horse no circle
+        cx, cy, rad = 250, y + 43, 42
+        draw.ellipse((cx-rad, cy-rad, cx+rad, cy+rad), fill=gold)
+        draw_centered_text(draw, (cx-rad, cy-rad, cx+rad, cy+rad), str(horse_no), horse_no_font, bg)
 
-        name_x = 325
-        stroke_text((name_x, y + 6), fit_text_to_width(draw, horse_name, horse_font, 650), horse_font, white, stroke_width=4)
+        # name and mates
+        name_x = 340
+        draw_fit_text(draw, (name_x, y - 6), horse_name, horse_font, white, 620)
 
         if mate_text:
             mate_text_spaced = mate_text.replace("◯", "○ ").replace("▲", "▲ ").replace("△", "△ ")
-            stroke_text((name_x, y + 72), mate_text_spaced, mate_font, white, stroke_width=3)
+            draw.text((name_x, y + 58), mate_text_spaced, font=mate_font, fill=muted)
 
-        draw.line((name_x, y + 119, 965, y + 119), fill=line_col, width=3)
-        draw.line((name_x, y + 123, 965, y + 123), fill=shadow, width=2)
+    draw.line((80, H - 110, 1000, H - 110), fill=(31, 36, 45), width=2)
 
     bio = io.BytesIO()
     img.save(bio, format="PNG")
@@ -1349,9 +1299,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v13.2 Stable Vertical SNS Save")
+st.title("競馬ランクアプリ v12.7 Vertical SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v13.2: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v12.7: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
