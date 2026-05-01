@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v13.0 Dabista Vertical SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v13.1 Dabista Vertical SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v13.0:
+# v13.1:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v13.0: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v13.1: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1124,96 +1124,104 @@ def make_sns_image(saved):
         date_main = dt.strftime("%Y.%m.%d")
         weekday = dt.strftime("%A").upper()
 
-    # v12.9 縦画面・ダビスタ風ピクセル背景
-    # 推奨馬は全頭表示。頭数に応じて縦幅を自動拡張する。
+    # v13.1 縦画面・ダビスタ風背景
+    # 推奨馬は全頭表示。頭数に応じて縦幅を自動拡張。
     W = 1080
-    row_y = 320
+    row_y = 330
     row_h = 166
     bottom_margin = 110
     H = max(1920, row_y + len(items) * row_h + bottom_margin)
-    img = Image.new("RGB", (W, H), (60, 115, 150))
-    draw = ImageDraw.Draw(img)
 
-    # 低解像度で背景を描いて拡大し、ダビスタ風のピクセル感を作る
+    img = Image.new("RGB", (W, H), (90, 145, 178))
+
+    # 背景は低解像度で描いて拡大し、ダビスタ風のピクセル感を作る
     scale = 6
     sw, sh = W // scale, H // scale
-    bg_small = Image.new("RGB", (sw, sh), (79, 137, 176))
+    bg_small = Image.new("RGB", (sw, sh), (92, 151, 184))
     sd = ImageDraw.Draw(bg_small)
 
-    # 空グラデーション
-    for y in range(sh):
-        t = y / sh
-        if y < int(sh * 0.55):
-            r = int(67 + 20 * t)
-            g = int(126 + 28 * t)
-            b = int(170 + 20 * t)
-        else:
-            r = int(65 - 18 * (t - 0.55))
-            g = int(124 - 36 * (t - 0.55))
-            b = int(150 - 70 * (t - 0.55))
-        sd.line((0, y, sw, y), fill=(max(0, r), max(0, g), max(0, b)))
+    sky_end = int(sh * 0.61)
+    turf_top = int(sh * 0.60)
 
-    # 雲
-    cloud = (174, 190, 190)
-    cloud_shadow = (130, 150, 158)
-    for cx, cy, w in [(22, 75, 38), (126, 50, 34), (152, 118, 30)]:
-        # Pillowは x1>x2 / y1>y2 の矩形でエラーになるため、
-        # 小さい雲でも座標が逆転しないように安全な幅で描画する。
-        sd.rectangle((cx, cy+7, cx+w, cy+12), fill=cloud_shadow)
-        sd.rectangle((cx+6, cy, cx+w-4, cy+10), fill=cloud)
-        sd.rectangle((cx+11, cy-6, cx+w-8, cy+14), fill=cloud)
-        sd.rectangle((cx+2, cy+6, cx+w+8, cy+18), fill=cloud)
+    # 空
+    for y in range(sh):
+        if y < sky_end:
+            t = y / max(1, sky_end)
+            r = int(83 + 35 * t)
+            g = int(145 + 28 * t)
+            b = int(184 + 26 * t)
+            sd.line((0, y, sw, y), fill=(r, g, b))
+        else:
+            t = (y - sky_end) / max(1, (sh - sky_end))
+            r = int(72 - 10 * t)
+            g = int(132 - 42 * t)
+            b = int(86 - 40 * t)
+            sd.line((0, y, sw, y), fill=(r, g, b))
+
+    # 柔らかい雲
+    def cloud_rect(cx, cy, w, h):
+        c1 = (185, 196, 190)
+        c2 = (144, 161, 164)
+        sd.rectangle((cx, cy + h//2, cx + w, cy + h//2 + 3), fill=c2)
+        sd.rectangle((cx + 2, cy + 5, cx + w - 3, cy + h), fill=c1)
+        sd.rectangle((cx + 8, cy, cx + w - 12, cy + h + 2), fill=c1)
+        sd.rectangle((cx + w//2, cy - 5, cx + w - 6, cy + h), fill=c1)
+
+    cloud_rect(10, 80, 34, 18)
+    cloud_rect(128, 54, 34, 20)
+    cloud_rect(82, 118, 50, 22)
 
     # 遠景の山
-    mountain = (89, 123, 145)
-    mountain2 = (70, 105, 132)
-    sd.polygon([(0, 180), (28, 120), (58, 180)], fill=mountain2)
-    sd.polygon([(34, 180), (82, 112), (135, 180)], fill=mountain)
-    sd.polygon([(100, 180), (145, 124), (190, 180)], fill=mountain2)
-    sd.rectangle((0, 170, sw, 190), fill=(83, 126, 122))
+    sd.polygon([(0, turf_top), (26, 130), (55, turf_top)], fill=(75, 112, 137))
+    sd.polygon([(40, turf_top), (90, 123), (142, turf_top)], fill=(93, 129, 148))
+    sd.polygon([(104, turf_top), (146, 136), (184, turf_top)], fill=(76, 111, 133))
 
-    # スタンド右側
-    stand_x = 132
-    sd.polygon([(stand_x, 105), (sw, 62), (sw, 86), (stand_x, 128)], fill=(83, 95, 103))
-    sd.polygon([(stand_x, 128), (sw, 88), (sw, 180), (stand_x, 190)], fill=(118, 123, 118))
-    for yy in range(134, 185, 9):
-        sd.line((stand_x, yy, sw, yy-13), fill=(48, 57, 66), width=1)
-    for k, col in enumerate([(210, 55, 55), (235, 205, 70), (65, 95, 170), (235, 235, 220)]):
-        for x in range(stand_x + 4 + k * 5, sw, 20):
-            for yy in range(136, 178, 12):
-                sd.rectangle((x, yy, x+2, yy+2), fill=col)
+    # 遠景の街
+    city_y = turf_top - 16
+    for x in range(0, sw, 8):
+        h = 5 + (x * 7) % 14
+        sd.rectangle((x, city_y - h, x + 5, city_y), fill=(104, 139, 139))
 
-    # 芝
-    turf_top = int(sh * 0.56)
-    sd.rectangle((0, turf_top, sw, sh), fill=(55, 126, 57))
-    for yy in range(turf_top, sh, 5):
-        c = (45 + (yy % 17), 105 + (yy % 23), 46)
-        sd.line((0, yy, sw, yy-16), fill=c, width=1)
+    # 右側の競馬場スタンド
+    sx = int(sw * 0.72)
+    sy = int(sh * 0.33)
+    sd.polygon([(sx - 4, sy), (sw, sy - 18), (sw, sy - 6), (sx - 8, sy + 14)], fill=(115, 126, 131))
+    sd.rectangle((sx, sy + 16, sw, sy + 120), fill=(103, 111, 108))
+    for k in range(4):
+        yy = sy + 28 + k * 24
+        sd.polygon([(sx, yy), (sw, yy - 18), (sw, yy - 10), (sx, yy + 8)], fill=(57, 66, 73))
+        sd.polygon([(sx, yy + 8), (sw, yy - 10), (sw, yy - 4), (sx, yy + 15)], fill=(205, 209, 204))
+        colors = [(210, 58, 52), (229, 192, 55), (59, 82, 155), (232, 232, 216)]
+        for x in range(sx + 5, sw, 10):
+            col = colors[(x + k) % len(colors)]
+            sd.rectangle((x, yy + 2, x + 2, yy + 4), fill=col)
 
-    # コース柵
-    sd.line((0, sh-96, sw, sh-172), fill=(210, 214, 205), width=3)
-    sd.line((0, sh-91, sw, sh-167), fill=(90, 94, 92), width=1)
+    # 芝・コース
+    sd.rectangle((0, turf_top, sw, sh), fill=(55, 120, 56))
+    for yy in range(turf_top, sh, 6):
+        col = (40 + (yy % 13), 96 + (yy % 17), 42)
+        sd.line((0, yy, sw, yy - 26), fill=col, width=1)
+    sd.line((0, sh - 92, sw, sh - 175), fill=(215, 218, 212), width=3)
+    sd.line((0, sh - 86, sw, sh - 169), fill=(86, 91, 88), width=1)
 
-    # 背景を拡大
+    # 拡大して貼り付け
     bg = bg_small.resize((W, H), Image.Resampling.NEAREST)
     img.paste(bg)
     draw = ImageDraw.Draw(img)
 
-    # 半透明風の暗幕で文字を読みやすくする
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 70))
+    # 文字可読性のための薄い暗幕
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 52))
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # 色
     navy = (15, 43, 72)
     white = (248, 248, 241)
     gold = (248, 203, 54)
     pale_gold = (255, 232, 115)
     black = (17, 21, 25)
-    line = (236, 236, 224)
+    line_col = (236, 236, 224)
     shadow = (20, 23, 28)
 
-    # フォント
     title_font = get_font(64, True)
     eng_font = get_font(34, True)
     date_font = get_font(37, True)
@@ -1224,13 +1232,11 @@ def make_sns_image(saved):
     horse_font = get_font(46, True)
     mate_font = get_font(29, True)
 
-    # 文字縁取り用
     def stroke_text(pos, text, font, fill, stroke_fill=shadow, stroke_width=3):
         x, y = pos
         draw.text((x, y), str(text), font=font, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
 
-    # ピクセル風ボックス
-    def pixel_panel(box, fill, outline=line, width=4, corner=18):
+    def pixel_panel(box, fill, outline=line_col, width=4, corner=18):
         x1, y1, x2, y2 = box
         pts = [
             (x1+corner, y1), (x2-corner, y1), (x2, y1+corner),
@@ -1246,19 +1252,30 @@ def make_sns_image(saved):
             ]
             draw.line(pts2 + [pts2[0]], fill=outline, width=1)
 
-    # ヘッダー
-    pixel_panel((28, 58, 765, 250), navy, outline=line, width=4, corner=26)
-    pixel_panel((795, 80, 1052, 225), navy, outline=line, width=4, corner=18)
+    def draw_horseshoe(cx, cy, size):
+        # 文字化け防止：フォント記号ではなく図形で馬蹄を描く
+        col = gold
+        dark = (112, 76, 10)
+        box = (cx, cy, cx + size, cy + size)
+        draw.arc(box, 35, 325, fill=dark, width=18)
+        draw.arc(box, 35, 325, fill=col, width=12)
+        draw.rectangle((cx + 2, cy + size//2 + 12, cx + 18, cy + size - 10), fill=col, outline=dark)
+        draw.rectangle((cx + size - 18, cy + size//2 + 12, cx + size - 2, cy + size - 10), fill=col, outline=dark)
+        for hx, hy in [(cx + 24, cy + 32), (cx + 47, cy + 24), (cx + 70, cy + 32)]:
+            draw.rectangle((hx, hy, hx + 5, hy + 5), fill=dark)
 
-    # 馬蹄アイコン風
-    stroke_text((72, 115), "♞", get_font(76, True), gold, stroke_fill=(96, 68, 12), stroke_width=2)
+    # ヘッダー
+    pixel_panel((28, 58, 765, 250), navy, outline=line_col, width=4, corner=26)
+    pixel_panel((795, 80, 1052, 225), navy, outline=line_col, width=4, corner=18)
+
+    draw_horseshoe(68, 118, 72)
     draw.text((150, 82), "TODAY'S PICKS", font=eng_font, fill=pale_gold, stroke_width=2, stroke_fill=shadow)
     draw.text((150, 135), "本日の推奨馬", font=title_font, fill=white, stroke_width=3, stroke_fill=shadow)
 
     draw.text((835, 108), date_main, font=date_font, fill=pale_gold, stroke_width=2, stroke_fill=shadow)
     draw.text((875, 160), weekday, font=weekday_font, fill=(183, 217, 236), stroke_width=2, stroke_fill=shadow)
 
-    # 行：保存済み推奨馬を全頭表示
+    # 行
     for i, r in enumerate(items):
         y = row_y + i * row_h
 
@@ -1268,26 +1285,21 @@ def make_sns_image(saved):
         horse_name = norm_text(r.get("馬名", ""))
         mate_text = norm_text(r.get("相手表示", ""))
 
-        # place/race left
         stroke_text((62, y + 2), place, place_font, pale_gold, stroke_width=3)
         stroke_text((62, y + 44), f"{race_no}R", race_font, pale_gold, stroke_width=3)
 
-        # horse number pixel badge
         bx1, by1, bx2, by2 = 184, y - 4, 284, y + 102
         pixel_panel((bx1, by1, bx2, by2), gold, outline=black, width=4, corner=12)
         draw_centered_text(draw, (bx1, by1, bx2, by2), str(horse_no), horse_no_font, black)
 
-        # horse name
         name_x = 325
         stroke_text((name_x, y + 6), fit_text_to_width(draw, horse_name, horse_font, 650), horse_font, white, stroke_width=4)
 
-        # mates
         if mate_text:
             mate_text_spaced = mate_text.replace("◯", "○ ").replace("▲", "▲ ").replace("△", "△ ")
             stroke_text((name_x, y + 72), mate_text_spaced, mate_font, white, stroke_width=3)
 
-        # underline
-        draw.line((name_x, y + 119, 965, y + 119), fill=line, width=3)
+        draw.line((name_x, y + 119, 965, y + 119), fill=line_col, width=3)
         draw.line((name_x, y + 123, 965, y + 123), fill=shadow, width=2)
 
     bio = io.BytesIO()
@@ -1384,9 +1396,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v13.0 Dabista Vertical SNS Save")
+st.title("競馬ランクアプリ v13.1 Dabista Vertical SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v13.0: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v13.1: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
