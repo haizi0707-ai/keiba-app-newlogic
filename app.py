@@ -8,11 +8,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(page_title="競馬ランクアプリ v13.1 Dabista Vertical SNS Save", layout="centered")
+st.set_page_config(page_title="競馬ランクアプリ v13.2 Stable Vertical SNS Save", layout="centered")
 
 BASE_DIR = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
 
-# v13.1:
+# v13.2:
 # まず相対位置版の履歴ファイルを読みに行きます。
 # なければ旧ファイルへフォールバックします。
 DEFAULT_FILES = {
@@ -289,7 +289,7 @@ def prepare_race_df(df):
     df["prevStraight"] = df["prevStraight"].fillna(50.0).clip(0, 100)
     df["prev2Straight"] = df["prev2Straight"].fillna(50.0).clip(0, 100)
 
-    # v13.1: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
+    # v13.2: 予想CSV側の前走頭数・通過順から相対位置カテゴリを自動作成
     df = apply_relative_position_logic(df)
 
     df["距離表示"] = np.where(df["surface"].astype(str) != "", df["surface"] + df["distance"].fillna(0).astype(int).astype(str), "")
@@ -1124,104 +1124,53 @@ def make_sns_image(saved):
         date_main = dt.strftime("%Y.%m.%d")
         weekday = dt.strftime("%A").upper()
 
-    # v13.1 縦画面・ダビスタ風背景
-    # 推奨馬は全頭表示。頭数に応じて縦幅を自動拡張。
+    # v13.2 安定版：
+    # 背景をプログラムで無理に描き込まず、読みやすい縦型レイアウトを固定。
+    # dabista_bg.png が同じフォルダにある場合だけ背景画像として使用。
     W = 1080
     row_y = 330
     row_h = 166
     bottom_margin = 110
     H = max(1920, row_y + len(items) * row_h + bottom_margin)
 
-    img = Image.new("RGB", (W, H), (90, 145, 178))
-
-    # 背景は低解像度で描いて拡大し、ダビスタ風のピクセル感を作る
-    scale = 6
-    sw, sh = W // scale, H // scale
-    bg_small = Image.new("RGB", (sw, sh), (92, 151, 184))
-    sd = ImageDraw.Draw(bg_small)
-
-    sky_end = int(sh * 0.61)
-    turf_top = int(sh * 0.60)
-
-    # 空
-    for y in range(sh):
-        if y < sky_end:
-            t = y / max(1, sky_end)
-            r = int(83 + 35 * t)
-            g = int(145 + 28 * t)
-            b = int(184 + 26 * t)
-            sd.line((0, y, sw, y), fill=(r, g, b))
+    bg_path = os.path.join(BASE_DIR, "dabista_bg.png")
+    if os.path.exists(bg_path):
+        bg = Image.open(bg_path).convert("RGB")
+        # 背景画像を中央トリミングで縦長に合わせる
+        bw, bh = bg.size
+        target_ratio = W / H
+        bg_ratio = bw / bh
+        if bg_ratio > target_ratio:
+            new_w = int(bh * target_ratio)
+            left = (bw - new_w) // 2
+            bg = bg.crop((left, 0, left + new_w, bh))
         else:
-            t = (y - sky_end) / max(1, (sh - sky_end))
-            r = int(72 - 10 * t)
-            g = int(132 - 42 * t)
-            b = int(86 - 40 * t)
-            sd.line((0, y, sw, y), fill=(r, g, b))
+            new_h = int(bw / target_ratio)
+            top = max(0, (bh - new_h) // 2)
+            bg = bg.crop((0, top, bw, top + new_h))
+        img = bg.resize((W, H), Image.Resampling.LANCZOS)
+    else:
+        # 安定したダークネイビー背景
+        img = Image.new("RGB", (W, H), (9, 14, 24))
 
-    # 柔らかい雲
-    def cloud_rect(cx, cy, w, h):
-        c1 = (185, 196, 190)
-        c2 = (144, 161, 164)
-        sd.rectangle((cx, cy + h//2, cx + w, cy + h//2 + 3), fill=c2)
-        sd.rectangle((cx + 2, cy + 5, cx + w - 3, cy + h), fill=c1)
-        sd.rectangle((cx + 8, cy, cx + w - 12, cy + h + 2), fill=c1)
-        sd.rectangle((cx + w//2, cy - 5, cx + w - 6, cy + h), fill=c1)
-
-    cloud_rect(10, 80, 34, 18)
-    cloud_rect(128, 54, 34, 20)
-    cloud_rect(82, 118, 50, 22)
-
-    # 遠景の山
-    sd.polygon([(0, turf_top), (26, 130), (55, turf_top)], fill=(75, 112, 137))
-    sd.polygon([(40, turf_top), (90, 123), (142, turf_top)], fill=(93, 129, 148))
-    sd.polygon([(104, turf_top), (146, 136), (184, turf_top)], fill=(76, 111, 133))
-
-    # 遠景の街
-    city_y = turf_top - 16
-    for x in range(0, sw, 8):
-        h = 5 + (x * 7) % 14
-        sd.rectangle((x, city_y - h, x + 5, city_y), fill=(104, 139, 139))
-
-    # 右側の競馬場スタンド
-    sx = int(sw * 0.72)
-    sy = int(sh * 0.33)
-    sd.polygon([(sx - 4, sy), (sw, sy - 18), (sw, sy - 6), (sx - 8, sy + 14)], fill=(115, 126, 131))
-    sd.rectangle((sx, sy + 16, sw, sy + 120), fill=(103, 111, 108))
-    for k in range(4):
-        yy = sy + 28 + k * 24
-        sd.polygon([(sx, yy), (sw, yy - 18), (sw, yy - 10), (sx, yy + 8)], fill=(57, 66, 73))
-        sd.polygon([(sx, yy + 8), (sw, yy - 10), (sw, yy - 4), (sx, yy + 15)], fill=(205, 209, 204))
-        colors = [(210, 58, 52), (229, 192, 55), (59, 82, 155), (232, 232, 216)]
-        for x in range(sx + 5, sw, 10):
-            col = colors[(x + k) % len(colors)]
-            sd.rectangle((x, yy + 2, x + 2, yy + 4), fill=col)
-
-    # 芝・コース
-    sd.rectangle((0, turf_top, sw, sh), fill=(55, 120, 56))
-    for yy in range(turf_top, sh, 6):
-        col = (40 + (yy % 13), 96 + (yy % 17), 42)
-        sd.line((0, yy, sw, yy - 26), fill=col, width=1)
-    sd.line((0, sh - 92, sw, sh - 175), fill=(215, 218, 212), width=3)
-    sd.line((0, sh - 86, sw, sh - 169), fill=(86, 91, 88), width=1)
-
-    # 拡大して貼り付け
-    bg = bg_small.resize((W, H), Image.Resampling.NEAREST)
-    img.paste(bg)
     draw = ImageDraw.Draw(img)
 
-    # 文字可読性のための薄い暗幕
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 52))
+    # 文字可読性のために全体へ暗幕
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 82))
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    navy = (15, 43, 72)
+    # 色
+    navy = (12, 35, 63)
     white = (248, 248, 241)
     gold = (248, 203, 54)
     pale_gold = (255, 232, 115)
     black = (17, 21, 25)
     line_col = (236, 236, 224)
     shadow = (20, 23, 28)
+    muted = (180, 190, 198)
 
+    # フォント
     title_font = get_font(64, True)
     eng_font = get_font(34, True)
     date_font = get_font(37, True)
@@ -1261,8 +1210,6 @@ def make_sns_image(saved):
         draw.arc(box, 35, 325, fill=col, width=12)
         draw.rectangle((cx + 2, cy + size//2 + 12, cx + 18, cy + size - 10), fill=col, outline=dark)
         draw.rectangle((cx + size - 18, cy + size//2 + 12, cx + size - 2, cy + size - 10), fill=col, outline=dark)
-        for hx, hy in [(cx + 24, cy + 32), (cx + 47, cy + 24), (cx + 70, cy + 32)]:
-            draw.rectangle((hx, hy, hx + 5, hy + 5), fill=dark)
 
     # ヘッダー
     pixel_panel((28, 58, 765, 250), navy, outline=line_col, width=4, corner=26)
@@ -1274,6 +1221,12 @@ def make_sns_image(saved):
 
     draw.text((835, 108), date_main, font=date_font, fill=pale_gold, stroke_width=2, stroke_fill=shadow)
     draw.text((875, 160), weekday, font=weekday_font, fill=(183, 217, 236), stroke_width=2, stroke_fill=shadow)
+
+    # dabista_bg.png がない場合は、軽い装飾線だけ追加
+    if not os.path.exists(bg_path):
+        draw.line((52, 286, 1028, 286), fill=(255, 255, 255, 70), width=2)
+        for yy in range(520, H, 260):
+            draw.line((325, yy, 965, yy), fill=(255, 255, 255, 90), width=2)
 
     # 行
     for i, r in enumerate(items):
@@ -1396,9 +1349,9 @@ def saved_df():
         st.session_state.saved_recs = []
     return pd.DataFrame(st.session_state.saved_recs)
 
-st.title("競馬ランクアプリ v13.1 Dabista Vertical SNS Save")
+st.title("競馬ランクアプリ v13.2 Stable Vertical SNS Save")
 st.write("ランキング計算は1会場ずつ安全に行い、単複おすすめ1だけを保存して、最後に3会場まとめSNS画像を作成します。")
-st.caption("v13.1: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
+st.caption("v13.2: 前走頭数・前3角通過順・前4角通過順があれば、通過順位を相対位置に補正して評価します。")
 st.caption("履歴ファイルは prev3c_relative_category_stats.csv / prev4c_relative_category_stats.csv を優先して読み込みます。")
 
 if "saved_recs" not in st.session_state:
